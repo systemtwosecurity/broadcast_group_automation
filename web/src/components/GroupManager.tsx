@@ -150,7 +150,9 @@ export function GroupManager({ environment }: GroupManagerProps) {
     const [githubUrl, setGithubUrl] = useState(() => {
       if (group.source.connection_config.repository) {
         const { repository, branch, root_path } = group.source.connection_config;
-        return `https://github.com/${repository}/tree/${branch}${root_path || ''}`;
+        // Ensure root_path has leading slash if it exists
+        const path = root_path ? (root_path.startsWith('/') ? root_path : `/${root_path}`) : '';
+        return `https://github.com/${repository}/tree/${branch}${path}`;
       }
       return '';
     });
@@ -389,7 +391,9 @@ export function GroupManager({ environment }: GroupManagerProps) {
           {groups.map((group) => {
             // Reconstruct GitHub URL for display
             const { repository, branch, root_path } = group.source.connection_config;
-            const githubUrl = `https://github.com/${repository}/tree/${branch}${root_path || ''}`;
+            // Ensure root_path has leading slash if it exists
+            const path = root_path ? (root_path.startsWith('/') ? root_path : `/${root_path}`) : '';
+            const githubUrl = `https://github.com/${repository}/tree/${branch}${path}`;
             
             return (
               <div
