@@ -21,7 +21,9 @@ export class MCPClient {
         '-y', 
         '@playwright/mcp',
         '--browser', 'chromium',  // Use installed Chromium instead of Chrome
-        '--headless'               // Run in headless mode for automation
+        '--headless',              // Run in headless mode for automation
+        '--isolated'               // Keep browser profile in memory (no persistence)
+        // NOTE: NOT using --shared-browser-context to get fresh contexts
       ],
     });
 
@@ -37,6 +39,69 @@ export class MCPClient {
 
     await this.client.connect(this.transport);
     console.log('✅ Connected to Playwright MCP server');
+  }
+  
+  /**
+   * Clear ALL browser data to simulate a fresh incognito session
+   * This is more efficient than spawning a new browser process
+   */
+  private async clearBrowserSession(appDomain: string) {
+    if (!this.client) return;
+    
+    console.log('   🧹 Clearing all browser data (cookies, storage, cache)...');
+    
+    // Navigate to the actual app domain first to access domain-specific cookies
+    await this.client.callTool({
+      name: 'browser_navigate',
+      arguments: { url: appDomain },
+    });
+    
+    await this.client.callTool({
+      name: 'browser_wait_for',
+      arguments: { time: 2 },
+    });
+    
+    // Clear everything on the actual domain
+    await this.client.callTool({
+      name: 'browser_evaluate',
+      arguments: {
+        function: `async () => {
+          // Clear localStorage and sessionStorage
+          localStorage.clear();
+          sessionStorage.clear();
+          
+          // Clear ALL cookies for this domain and parent domains
+          const allCookies = document.cookie.split(';');
+          console.log('Clearing ' + allCookies.length + ' cookies');
+          
+          allCookies.forEach(cookie => {
+            const name = cookie.split('=')[0].trim();
+            if (name) {
+              // Get all domain variations
+              const hostname = window.location.hostname;
+              const parts = hostname.split('.');
+              
+              // Clear for current domain
+              document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+              document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + hostname;
+              
+              // Clear for all parent domains (.dev.s2s.ai, .s2s.ai, etc.)
+              for (let i = 0; i < parts.length - 1; i++) {
+                const domain = parts.slice(i).join('.');
+                document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.' + domain;
+                document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + domain;
+              }
+            }
+          });
+          
+          // Verify cookies are cleared
+          const remainingCookies = document.cookie.split(';').filter(c => c.trim()).length;
+          return 'CLEARED_' + (allCookies.length - remainingCookies) + '_COOKIES';
+        }`,
+      },
+    });
+    
+    console.log('   ✅ Browser session cleared');
   }
 
   /**
@@ -94,8 +159,7 @@ export class MCPClient {
     console.log(`🔐 Logging in as ${email}...`);
 
     try {
-      // Navigate directly to login page
-      // (fresh browser context = no existing session)
+      // Navigate to login page (fresh browser instance = no Auth0 SSO)
       console.log(`   🔗 Navigating to login page...`);
       await this.client.callTool({
         name: 'browser_navigate',
@@ -108,11 +172,30 @@ export class MCPClient {
         arguments: { time: 5 },
       });
 
-      // With fresh browser context, we should be on Auth0 login page
-      // Wait for the form to be ready
+      // Check what page we're actually on
+      const urlCheck = await this.client.callTool({
+        name: 'browser_evaluate',
+        arguments: {
+          function: `() => window.location.href`,
+        },
+      });
+      
+      const urlContent = urlCheck.content as Array<{ text?: string }> | undefined;
+      let currentUrl = urlContent?.[0]?.text || '';
+      if (currentUrl.includes('### Result')) {
+        const lines = currentUrl.split('\n');
+        const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
+        if (resultIndex !== -1 && lines[resultIndex + 1]) {
+          currentUrl = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
+        }
+      }
+      
+      console.log(`   🌐 Current URL: ${currentUrl}`);
+
+      // Wait longer for the form to be ready
       await this.client.callTool({
         name: 'browser_wait_for',
-        arguments: { time: 2 },
+        arguments: { time: 3 },
       });
 
       // Use browser_evaluate to directly fill the form (more reliable for Auth0)
@@ -120,20 +203,33 @@ export class MCPClient {
       const escapedEmail = email.replace(/'/g, "\\'").replace(/"/g, '\\"');
       const escapedPassword = password.replace(/'/g, "\\'").replace(/"/g, '\\"');
       
-      console.log(`   📧 Filling email and password fields...`);
-      const fillResult = await this.client.callTool({
+      console.log(`   📧 Checking for login form fields...`);
+      const fillToolResult = await this.client.callTool({
         name: 'browser_evaluate',
         arguments: {
           function: `() => {
             const email = '${escapedEmail}';
             const password = '${escapedPassword}';
             
+            // Check what page we're on
+            const url = window.location.href;
+            
             // Wait for fields to be available
             const emailField = document.getElementById('username');
             const passwordField = document.getElementById('password');
             
             if (!emailField || !passwordField) {
-              return 'FIELDS_NOT_FOUND';
+              // Get some debug info
+              const pageTitle = document.title;
+              const hasLoginForm = document.querySelector('form') !== null;
+              const allInputs = Array.from(document.querySelectorAll('input')).map(i => i.id || i.name || i.type);
+              return JSON.stringify({
+                status: 'FIELDS_NOT_FOUND',
+                url: url,
+                title: pageTitle,
+                hasForm: hasLoginForm,
+                inputs: allInputs
+              });
             }
             
             // Fill email field
@@ -146,25 +242,43 @@ export class MCPClient {
             passwordField.dispatchEvent(new Event('input', { bubbles: true }));
             passwordField.dispatchEvent(new Event('change', { bubbles: true }));
             
-            return 'SUCCESS';
+            return JSON.stringify({ status: 'SUCCESS' });
           }`,
         },
       });
       
-      const fillContent = fillResult.content as Array<{ text?: string }> | undefined;
-      let fillStatus = fillContent?.[0]?.text || '';
+      const fillContent = fillToolResult.content as Array<{ text?: string }> | undefined;
+      let fillStatus = fillContent?.[0]?.text || '{}';
       
       // Parse MCP response
       if (fillStatus.includes('### Result')) {
         const lines = fillStatus.split('\n');
         const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
         if (resultIndex !== -1 && lines[resultIndex + 1]) {
-          fillStatus = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
+          fillStatus = lines[resultIndex + 1].trim();
         }
       }
       
-      if (fillStatus === 'FIELDS_NOT_FOUND') {
-        throw new Error('Login form fields not found - page may still be loading');
+      // Remove surrounding quotes if present
+      fillStatus = fillStatus.replace(/^["']|["']$/g, '');
+      
+      // Unescape the JSON string (MCP returns escaped JSON in a string)
+      fillStatus = fillStatus.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      
+      let fillResult;
+      try {
+        fillResult = JSON.parse(fillStatus);
+      } catch (parseError) {
+        console.log(`   ❌ Failed to parse form check result: ${fillStatus.substring(0, 200)}`);
+        throw new Error(`Form check failed: ${fillStatus.substring(0, 100)}`);
+      }
+      
+      if (fillResult.status === 'FIELDS_NOT_FOUND') {
+        console.log(`   ❌ Page title: ${fillResult.title}`);
+        console.log(`   ❌ URL: ${fillResult.url}`);
+        console.log(`   ❌ Has form: ${fillResult.hasForm}`);
+        console.log(`   ❌ Available inputs: ${fillResult.inputs.join(', ')}`);
+        throw new Error('Login form fields not found. Already logged in or redirected to app homepage.');
       }
       
       console.log(`   ✅ Form filled successfully`);
@@ -192,86 +306,125 @@ export class MCPClient {
       console.log('⏳ Waiting for redirect and authentication...');
       await this.client.callTool({
         name: 'browser_wait_for',
-        arguments: { time: 5 },
+        arguments: { time: 3 },
+      });
+      
+      // Check URL for tokens in hash or query params (Auth0 might return them here)
+      const callbackUrlCheck = await this.client.callTool({
+        name: 'browser_evaluate',
+        arguments: {
+          function: `() => {
+            return JSON.stringify({
+              href: window.location.href,
+              hash: window.location.hash,
+              search: window.location.search
+            });
+          }`,
+        },
+      });
+      
+      const callbackContent = callbackUrlCheck.content as Array<{ text?: string }> | undefined;
+      let callbackRaw = callbackContent?.[0]?.text || '{}';
+      if (callbackRaw.includes('### Result')) {
+        const lines = callbackRaw.split('\n');
+        const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
+        if (resultIndex !== -1 && lines[resultIndex + 1]) {
+          callbackRaw = lines[resultIndex + 1].trim();
+        }
+      }
+      callbackRaw = callbackRaw.replace(/^["']|["']$/g, '').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      const callbackInfo = JSON.parse(callbackRaw);
+      
+      console.log(`   🌐 Callback URL: ${callbackInfo.href}`);
+      console.log(`   🔗 Hash: ${callbackInfo.hash}`);
+      console.log(`   🔗 Search: ${callbackInfo.search}`);
+      
+      // Wait a bit more for any final redirects
+      await this.client.callTool({
+        name: 'browser_wait_for',
+        arguments: { time: 2 },
       });
 
       // Verify we're logged in
-      const urlCheck = await this.client.callTool({
+      const finalUrlCheck = await this.client.callTool({
         name: 'browser_evaluate',
         arguments: {
           function: `() => window.location.href`,
         },
       });
 
-      const urlContent = urlCheck.content as Array<{ text?: string }> | undefined;
-      let currentUrl = urlContent?.[0]?.text || '';
+      const finalUrlContent = finalUrlCheck.content as Array<{ text?: string }> | undefined;
+      let finalUrl = finalUrlContent?.[0]?.text || '';
       
       // Parse MCP response
-      if (currentUrl.includes('### Result')) {
-        const lines = currentUrl.split('\n');
+      if (finalUrl.includes('### Result')) {
+        const lines = finalUrl.split('\n');
         const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
         if (resultIndex !== -1 && lines[resultIndex + 1]) {
-          currentUrl = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
+          finalUrl = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
         }
       }
       
-      if (currentUrl.includes('/login') || currentUrl.includes('auth0.com')) {
+      if (finalUrl.includes('/login') || finalUrl.includes('auth0.com')) {
         throw new Error('Login failed - still on login page');
       }
 
       console.log(`✅ Successfully logged in as ${email}`);
       
-      // Look for access_token and refresh_token in storage
-      console.log(`🔍 Looking for access_token and refresh_token...`);
+      // Wait for the app to process Auth0 callback and store tokens
+      console.log(`⏳ Waiting for app to process authentication...`);
+      await this.client.callTool({
+        name: 'browser_wait_for',
+        arguments: { time: 3 },
+      });
+      
+      // Extract tokens from localStorage (app should have stored them by now)
+      console.log(`🔍 Looking for access_token and refresh_token in storage...`);
       const tokenExtract = await this.client.callTool({
         name: 'browser_evaluate',
         arguments: {
           function: `() => {
-            const tokens = {
-              access_token: null,
-              refresh_token: null,
-              storage_keys: []
+            // Check all localStorage and sessionStorage keys for tokens
+            const result = { access_token: null, refresh_token: null, keys: [] };
+            
+            // Helper to extract tokens from storage
+            const extractFromStorage = (storage, prefix) => {
+              for (let i = 0; i < storage.length; i++) {
+                const key = storage.key(i);
+                if (key) {
+                  result.keys.push(prefix + '.' + key);
+                  const value = storage.getItem(key);
+                  
+                  // Look for JWT tokens (start with eyJ)
+                  if (value && value.length > 50 && value.startsWith('eyJ')) {
+                    if (key.includes('access') || key.includes('token')) {
+                      result.access_token = value;
+                    }
+                    if (key.includes('refresh')) {
+                      result.refresh_token = value;
+                    }
+                  }
+                  
+                  // Also check if value is JSON with nested tokens
+                  try {
+                    const parsed = JSON.parse(value);
+                    if (parsed.access_token || parsed.accessToken || parsed.token) {
+                      result.access_token = parsed.access_token || parsed.accessToken || parsed.token;
+                    }
+                    if (parsed.refresh_token || parsed.refreshToken) {
+                      result.refresh_token = parsed.refresh_token || parsed.refreshToken;
+                    }
+                  } catch (e) {
+                    // Not JSON, continue
+                  }
+                }
+              }
             };
             
-            // Check localStorage
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i);
-              if (key) {
-                tokens.storage_keys.push('localStorage.' + key);
-                const value = localStorage.getItem(key);
-                if (key.includes('access') || key.includes('token')) {
-                  if (value && value.length > 20 && value.startsWith('eyJ')) {
-                    tokens.access_token = value;
-                  }
-                }
-                if (key.includes('refresh')) {
-                  if (value && value.length > 20) {
-                    tokens.refresh_token = value;
-                  }
-                }
-              }
-            }
+            extractFromStorage(localStorage, 'localStorage');
+            extractFromStorage(sessionStorage, 'sessionStorage');
             
-            // Check sessionStorage
-            for (let i = 0; i < sessionStorage.length; i++) {
-              const key = sessionStorage.key(i);
-              if (key) {
-                tokens.storage_keys.push('sessionStorage.' + key);
-                const value = sessionStorage.getItem(key);
-                if (key.includes('access') || key.includes('token')) {
-                  if (value && value.length > 20 && value.startsWith('eyJ')) {
-                    tokens.access_token = value;
-                  }
-                }
-                if (key.includes('refresh')) {
-                  if (value && value.length > 20) {
-                    tokens.refresh_token = value;
-                  }
-                }
-              }
-            }
-            
-            return JSON.stringify(tokens);
+            return JSON.stringify(result);
           }`,
         },
       });
@@ -284,39 +437,107 @@ export class MCPClient {
         const lines = tokensRaw.split('\n');
         const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
         if (resultIndex !== -1 && lines[resultIndex + 1]) {
-          tokensRaw = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
+          tokensRaw = lines[resultIndex + 1].trim();
         }
       }
       
-      const tokens = JSON.parse(tokensRaw);
+      // Remove surrounding quotes and unescape
+      tokensRaw = tokensRaw.replace(/^["']|["']$/g, '');
+      tokensRaw = tokensRaw.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
       
-      console.log(`📦 Available storage keys: ${tokens.storage_keys.join(', ')}`);
+      const tokenData = JSON.parse(tokensRaw);
       
-      // If we found refresh_token, use it to get access_token
-      if (tokens.refresh_token) {
-        console.log(`✅ Found refresh_token: ${tokens.refresh_token.substring(0, 30)}...`);
+      console.log(`📦 Storage keys found: ${tokenData.keys.join(', ')}`);
+      
+      // Priority 1: Use refresh_token if available
+      if (tokenData.refresh_token) {
+        console.log(`✅ Found refresh_token: ${tokenData.refresh_token.substring(0, 30)}...`);
+        console.log(`🔄 Exchanging refresh_token for fresh access_token...`);
         
-        const tokenResponse = await this.refreshAccessToken(
-          auth0Domain,
-          clientId,
-          clientSecret,
-          tokens.refresh_token
-        );
-        
-        return tokenResponse.access_token;
+        try {
+          const tokenResponse = await this.refreshAccessToken(
+            auth0Domain,
+            clientId,
+            clientSecret,
+            tokenData.refresh_token
+          );
+          console.log(`✅ Got fresh access_token (expires in ${tokenResponse.expires_in}s)`);
+          return tokenResponse.access_token;
+        } catch (refreshError) {
+          console.log(`⚠️  Refresh token exchange failed: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`);
+          // Fall through to try other methods
+        }
       }
       
-      // If we found access_token directly, use it
-      if (tokens.access_token) {
-        console.log(`✅ Found access_token directly: ${tokens.access_token.substring(0, 30)}...`);
-        return tokens.access_token;
+      // Priority 2: Use access_token directly if found
+      if (tokenData.access_token) {
+        console.log(`✅ Found access_token directly: ${tokenData.access_token.substring(0, 30)}...`);
+        return tokenData.access_token;
       }
       
-      // No tokens found
-      throw new Error('No access_token or refresh_token found in storage after login. They might be in httpOnly cookies.');
+      // Priority 3: Extract from httpOnly cookies via CDP
+      console.log(`⚠️  No tokens in storage - attempting to extract from httpOnly cookies...`);
+      
+      try {
+        // Try to get cookies via document.cookie (won't include httpOnly)
+        // But we can make an API call from the browser which will auto-include auth cookies
+        const testApiUrl = `${loginUrl.replace('/login', '')}/api/v1/users/me`;
+        console.log(`   🔍 Testing authentication with: ${testApiUrl}`);
+        
+        const userInfo = await this.makeApiCall(testApiUrl, 'GET');
+        console.log(`✅ Authenticated via httpOnly cookies as: ${userInfo.email || email}`);
+        
+        // Since auth works via cookies, use password grant as fallback to get extractable token
+        console.log(`   🔄 Getting extractable token via password grant...`);
+        const passwordToken = await this.getPasswordGrantToken(auth0Domain, clientId, clientSecret, email, password);
+        console.log(`✅ Got password grant access_token: ${passwordToken.substring(0, 30)}...`);
+        return passwordToken;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        throw new Error(`Token extraction failed. Tokens are in httpOnly cookies and password grant is not enabled in Auth0. Please enable 'Password' grant type in Auth0 Dashboard > Applications > ${clientId} > Advanced Settings > Grant Types. Error: ${errorMsg}`);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Login failed for ${email}: ${errorMessage}`);
+    }
+  }
+  
+  /**
+   * Get access token using Auth0 Password Grant (Resource Owner Password) flow
+   * This is used when tokens are in httpOnly cookies and cannot be extracted
+   */
+  async getPasswordGrantToken(
+    auth0Domain: string,
+    clientId: string,
+    clientSecret: string,
+    userEmail: string,
+    userPassword: string
+  ): Promise<string> {
+    try {
+      const response = await axios.post<{ access_token: string; token_type: string; expires_in: number }>(
+        `${auth0Domain}/oauth/token`,
+        {
+          grant_type: 'password',
+          username: userEmail,
+          password: userPassword,
+          client_id: clientId,
+          client_secret: clientSecret,
+          audience: 'https://api.detections.ai',  // Your API identifier
+          scope: 'openid profile email offline_access'
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+
+      return response.data.access_token;
+    } catch (error) {
+      const errorMsg = axios.isAxiosError(error)
+        ? `${error.response?.status}: ${JSON.stringify(error.response?.data)}`
+        : error instanceof Error
+        ? error.message
+        : String(error);
+      throw new Error(`Auth0 password grant failed: ${errorMsg}`);
     }
   }
 

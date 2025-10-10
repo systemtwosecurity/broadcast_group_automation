@@ -90,9 +90,10 @@ export class SetupWorkflow {
       console.log(`─────────────────────────────────────`);
 
       try {
-        // Close and reconnect to get fresh browser context (true incognito)
-        console.log(`🔄 Starting fresh browser session for ${user.id}...`);
+        // Force kill and restart MCP server for true isolation
+        console.log(`🔄 Restarting browser for fresh session (${user.id})...`);
         await this.mcpClient.close();
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for process cleanup
         await this.mcpClient.connect();
         
         // Get user token

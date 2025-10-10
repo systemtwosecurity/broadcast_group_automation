@@ -62,14 +62,15 @@ export class InvitationWorkflow {
       return;
     }
 
-    // Get admin token with fresh browser context
+    // Get admin token with completely fresh browser instance
     console.log("=== Admin Login ===");
     const { Config } = await import('../config/config.js');
     const appUrl = Config.getApiUrl('app', this.environment);
     
-    // Close and reconnect to get fresh browser context (true incognito)
-    console.log("🔄 Starting fresh browser session...");
+    // Force kill and restart MCP server for true isolation
+    console.log("🔄 Restarting browser for fresh session...");
     await this.mcpClient.close();
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for process cleanup
     await this.mcpClient.connect();
     
     const adminToken = await this.mcpClient.login(
@@ -81,7 +82,7 @@ export class InvitationWorkflow {
       Config.auth0ClientSecret
     );
 
-    // Send invitations using the access token
+    // Send invitations using the bearer token
     console.log("\n=== Sending Invitations ===");
     const needsInviteEmails = needsInvite.map(u => u.email);
     
