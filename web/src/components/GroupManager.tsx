@@ -145,7 +145,15 @@ export function GroupManager({ environment }: GroupManagerProps) {
 
   const GroupForm = ({ group, onSave, onCancel }: { group: GroupConfig; onSave: (g: GroupConfig) => void; onCancel: () => void }) => {
     const [formData, setFormData] = useState<GroupConfig>(group);
-    const [githubUrl, setGithubUrl] = useState('');
+    
+    // Initialize githubUrl from existing group data if editing
+    const [githubUrl, setGithubUrl] = useState(() => {
+      if (group.source.connection_config.repository) {
+        const { repository, branch, root_path } = group.source.connection_config;
+        return `https://github.com/${repository}/tree/${branch}${root_path || ''}`;
+      }
+      return '';
+    });
 
     const updateField = (path: string, value: any) => {
       const keys = path.split('.');
@@ -160,16 +168,16 @@ export function GroupManager({ environment }: GroupManagerProps) {
       setFormData(updated);
     };
 
-    const parseGithubUrl = (url: string) => {
+    const parseAndSave = () => {
       try {
-        // Handle various GitHub URL formats:
-        // https://github.com/owner/repo
-        // https://github.com/owner/repo/tree/branch
-        // https://github.com/owner/repo/tree/branch/path/to/folder
-        // github.com/owner/repo
-        // owner/repo
-        
-        let cleanUrl = url.trim();
+        // Validate basic fields first
+        if (!formData.id || !formData.name || !githubUrl) {
+          showMessage('error', 'Group ID, name, and GitHub URL are required');
+          return;
+        }
+
+        // Parse GitHub URL
+        let cleanUrl = githubUrl.trim();
         
         // Remove protocol if present
         cleanUrl = cleanUrl.replace(/^https?:\/\//, '');
@@ -200,16 +208,16 @@ export function GroupManager({ environment }: GroupManagerProps) {
           }
         }
         
-        // Update form data
+        // Update form data with parsed values
         const updated = { ...formData };
         updated.source.connection_config.repository = `${owner}/${repo}`;
         updated.source.connection_config.branch = branch;
         updated.source.connection_config.root_path = rootPath;
         
-        setFormData(updated);
-        showMessage('success', `Parsed: ${owner}/${repo} (branch: ${branch}${rootPath ? ', path: ' + rootPath : ''})`);
+        // Save
+        onSave(updated);
       } catch (error: any) {
-        showMessage('error', `Failed to parse GitHub URL: ${error.message}`);
+        showMessage('error', `Failed to save: ${error.message}`);
       }
     };
 
@@ -278,89 +286,44 @@ export function GroupManager({ environment }: GroupManagerProps) {
         <div className="space-y-4">
           <h4 className="text-md font-semibold text-white dark:text-gray-100">Source Configuration</h4>
           
-          {/* GitHub URL Parser */}
-          <div className="p-4 bg-blue-500/10 dark:bg-blue-900/20 border border-blue-500/30 dark:border-blue-700 rounded-lg">
-            <label className="block text-sm font-medium text-blue-300 dark:text-blue-400 mb-2">
-              🔗 GitHub Repository URL (paste full URL or owner/repo)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={githubUrl}
-                onChange={(e) => setGithubUrl(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && parseGithubUrl(githubUrl)}
-                placeholder="e.g., https://github.com/SigmaHQ/sigma/tree/master/rules"
-                className="flex-1 px-4 py-2 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                type="button"
-                onClick={() => parseGithubUrl(githubUrl)}
-                className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
-              >
-                Parse URL
-              </button>
-            </div>
-            <p className="text-xs text-white/50 dark:text-gray-400 mt-2">
-              Supports: full URLs, owner/repo, URLs with branch and path
-            </p>
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <input
               type="text"
               value={formData.source.name}
               onChange={(e) => updateField('source.name', e.target.value)}
-              placeholder="Source name"
+              placeholder="Source name (e.g., SigmaHQ Public Rules)"
               className="w-full px-4 py-2 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <input
               type="text"
               value={formData.source.description}
               onChange={(e) => updateField('source.description', e.target.value)}
-              placeholder="Source description"
+              placeholder="Description (e.g., Community sigma rules from GitHub)"
               className="w-full px-4 py-2 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
-          {/* Parsed Fields (Read-only style but editable) */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs text-white/70 dark:text-gray-300 mb-1">Repository</label>
-              <input
-                type="text"
-                value={formData.source.connection_config.repository}
-                onChange={(e) => updateField('source.connection_config.repository', e.target.value)}
-                placeholder="owner/repo"
-                className="w-full px-4 py-2 bg-green-500/10 dark:bg-green-900/20 border border-green-500/30 dark:border-green-700 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-white/70 dark:text-gray-300 mb-1">Branch</label>
-              <input
-                type="text"
-                value={formData.source.connection_config.branch}
-                onChange={(e) => updateField('source.connection_config.branch', e.target.value)}
-                placeholder="main"
-                className="w-full px-4 py-2 bg-green-500/10 dark:bg-green-900/20 border border-green-500/30 dark:border-green-700 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-white/70 dark:text-gray-300 mb-1">Root Path (optional)</label>
-              <input
-                type="text"
-                value={formData.source.connection_config.root_path || ''}
-                onChange={(e) => updateField('source.connection_config.root_path', e.target.value)}
-                placeholder="/rules"
-                className="w-full px-4 py-2 bg-green-500/10 dark:bg-green-900/20 border border-green-500/30 dark:border-green-700 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
-              />
-            </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white/70 dark:text-gray-300 mb-2">
+              GitHub Repository URL *
+            </label>
+            <input
+              type="text"
+              value={githubUrl}
+              onChange={(e) => setGithubUrl(e.target.value)}
+              placeholder="e.g., https://github.com/SigmaHQ/sigma/tree/master/rules"
+              className="w-full px-4 py-2 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-white/50 dark:text-gray-400 mt-2">
+              Paste full GitHub URL (with branch and path) or just owner/repo. Repository, branch, and path will be extracted automatically.
+            </p>
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex gap-3">
           <button
-            onClick={() => onSave(formData)}
+            onClick={parseAndSave}
             className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
           >
             <Save className="w-5 h-5" />
@@ -423,39 +386,45 @@ export function GroupManager({ environment }: GroupManagerProps) {
       {/* Existing Groups */}
       {!showAddForm && !editingGroup && (
         <div className="space-y-3">
-          {groups.map((group) => (
-            <div
-              key={group.id}
-              className="p-4 bg-white/5 dark:bg-gray-800/50 rounded-lg border border-white/20 dark:border-gray-700 hover:bg-white/10 dark:hover:bg-gray-800/70 transition-colors"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-white dark:text-gray-100">{group.name}</h3>
-                  <p className="text-sm text-white/70 dark:text-gray-300 font-mono">{group.id}</p>
-                  <p className="text-sm text-white/50 dark:text-gray-400 mt-1">
-                    Email: {generateEmail(group.id, environment)}
-                  </p>
-                  <p className="text-sm text-white/50 dark:text-gray-400">
-                    Source: {group.source.connection_config.repository} ({group.source.connection_config.branch})
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setEditingGroup(group)}
-                    className="px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg transition-colors"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => deleteGroup(group.id)}
-                    className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+          {groups.map((group) => {
+            // Reconstruct GitHub URL for display
+            const { repository, branch, root_path } = group.source.connection_config;
+            const githubUrl = `https://github.com/${repository}/tree/${branch}${root_path || ''}`;
+            
+            return (
+              <div
+                key={group.id}
+                className="p-4 bg-white/5 dark:bg-gray-800/50 rounded-lg border border-white/20 dark:border-gray-700 hover:bg-white/10 dark:hover:bg-gray-800/70 transition-colors"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-white dark:text-gray-100">{group.name}</h3>
+                    <p className="text-sm text-white/70 dark:text-gray-300 font-mono">{group.id}</p>
+                    <p className="text-sm text-white/50 dark:text-gray-400 mt-1">
+                      Email: {generateEmail(group.id, environment)}
+                    </p>
+                    <p className="text-sm text-white/50 dark:text-gray-400 break-all">
+                      Source: {githubUrl}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setEditingGroup(group)}
+                      className="px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => deleteGroup(group.id)}
+                      className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
