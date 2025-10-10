@@ -8,26 +8,29 @@ Automate security content group and source creation across multiple platforms wi
 # 1. Install dependencies
 npm install
 
-# 2. Install Chromium for browser automation (one-time, ~280MB)
-npx playwright install chromium
+# 2. Get your bearer token from Chrome DevTools
+# - Login to https://detections.dev.s2s.ai
+# - Open DevTools (F12) → Network tab
+# - Make any API call
+# - Copy the "Authorization: Bearer ..." header value (without "Bearer ")
 
-# 3. Configure environment variables (credentials and Auth0)
-cp .env.example .env
-vim .env  # Add passwords, Auth0 domain, client ID, and client secret
+# 3. Configure environment variables
+cp env.example .env
+vim .env  # Add your ADMIN_TOKEN and USER_TOKEN_* values
 
 # 4. Send invitations
 npm run dev -- invite --env dev
 
-# 5. (Wait for users to verify emails, then update passwords in .env)
+# 5. (Wait for users to verify emails, then get their tokens)
 
-# 6. Create groups and sources
+# 6. Add user tokens to .env and create groups/sources
 npm run dev -- setup --env dev
 
 # 7. Check status
 npm run dev -- status --env dev
 ```
 
-> **Note:** First-time setup downloads Chromium (~280MB). This is cached in `~/.cache/ms-playwright/` for future use.
+> **Note:** Tokens expire after 1 hour. Just get a fresh token from DevTools when needed.
 
 For detailed setup instructions, see **[SETUP.md](./SETUP.md)**.
 

@@ -142,7 +142,9 @@ export class MCPClient {
   }
 
   /**
-   * Login via browser automation and return access_token
+   * Login via browser automation AND get access token via Password Grant
+   * Returns the access token for use in Authorization: Bearer headers
+   * This mimics how the real frontend works!
    */
   async login(
     loginUrl: string,
@@ -369,398 +371,20 @@ export class MCPClient {
         throw new Error('Login failed - still on login page');
       }
 
-      console.log(`✅ Successfully logged in as ${email}`);
+      console.log(`✅ Successfully logged in via browser`);
       
-      // Wait for the app to process Auth0 callback and store tokens
-      console.log(`⏳ Waiting for app to process authentication and initialize...`);
-      await this.client.callTool({
-        name: 'browser_wait_for',
-        arguments: { time: 8 }, // Even longer wait for app to fully initialize
-      });
+      // Now get the access token via Password Grant (same way the frontend gets it from Auth0)
+      console.log(`🔑 Getting access token from Auth0...`);
+      const accessToken = await this.getPasswordGrantToken(
+        auth0Domain,
+        clientId,
+        clientSecret,
+        email,
+        password
+      );
       
-      // Check for console errors that might indicate auth issues
-      const consoleCheck = await this.client.callTool({
-        name: 'browser_console_messages',
-        arguments: {}
-      });
-      const consoleContent = consoleCheck.content as Array<{ text?: string }> | undefined;
-      const consoleText = consoleContent?.[0]?.text || '';
-      if (consoleText.toLowerCase().includes('error') || consoleText.toLowerCase().includes('fail')) {
-        console.log(`   ⚠️  Console errors detected (might be normal):`)
-        const lines = consoleText.split('\n').filter(l => l.toLowerCase().includes('error') || l.toLowerCase().includes('fail'));
-        lines.slice(0, 3).forEach(line => console.log(`      ${line.substring(0, 100)}`));
-      }
-      
-      // Extract tokens from localStorage (app should have stored them by now)
-      console.log(`🔍 Looking for access_token and refresh_token in storage...`);
-      const tokenExtract = await this.client.callTool({
-        name: 'browser_evaluate',
-        arguments: {
-          function: `() => {
-            // Check all localStorage and sessionStorage keys for tokens
-            const result = { access_token: null, refresh_token: null, keys: [] };
-            
-            // Helper to extract tokens from storage
-            const extractFromStorage = (storage, prefix) => {
-              for (let i = 0; i < storage.length; i++) {
-                const key = storage.key(i);
-                if (key) {
-                  result.keys.push(prefix + '.' + key);
-                  const value = storage.getItem(key);
-                  
-                  // Look for JWT tokens (start with eyJ)
-                  if (value && value.length > 50 && value.startsWith('eyJ')) {
-                    if (key.includes('access') || key.includes('token')) {
-                      result.access_token = value;
-                    }
-                    if (key.includes('refresh')) {
-                      result.refresh_token = value;
-                    }
-                  }
-                  
-                  // Also check if value is JSON with nested tokens
-                  try {
-                    const parsed = JSON.parse(value);
-                    if (parsed.access_token || parsed.accessToken || parsed.token) {
-                      result.access_token = parsed.access_token || parsed.accessToken || parsed.token;
-                    }
-                    if (parsed.refresh_token || parsed.refreshToken) {
-                      result.refresh_token = parsed.refresh_token || parsed.refreshToken;
-                    }
-                  } catch (e) {
-                    // Not JSON, continue
-                  }
-                }
-              }
-            };
-            
-            extractFromStorage(localStorage, 'localStorage');
-            extractFromStorage(sessionStorage, 'sessionStorage');
-            
-            return JSON.stringify(result);
-          }`,
-        },
-      });
-      
-      const tokenContent = tokenExtract.content as Array<{ text?: string }> | undefined;
-      let tokensRaw = tokenContent?.[0]?.text || '{}';
-      
-      // Parse MCP response
-      if (tokensRaw.includes('### Result')) {
-        const lines = tokensRaw.split('\n');
-        const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
-        if (resultIndex !== -1 && lines[resultIndex + 1]) {
-          tokensRaw = lines[resultIndex + 1].trim();
-        }
-      }
-      
-      // Remove surrounding quotes and unescape
-      tokensRaw = tokensRaw.replace(/^["']|["']$/g, '');
-      tokensRaw = tokensRaw.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-      
-      const tokenData = JSON.parse(tokensRaw);
-      
-      console.log(`📦 Storage keys found: ${tokenData.keys.join(', ')}`);
-      
-      // Priority 1: Use refresh_token if available
-      if (tokenData.refresh_token) {
-        console.log(`✅ Found refresh_token: ${tokenData.refresh_token.substring(0, 30)}...`);
-        console.log(`🔄 Exchanging refresh_token for fresh access_token...`);
-        
-        try {
-          const tokenResponse = await this.refreshAccessToken(
-            auth0Domain,
-            clientId,
-            clientSecret,
-            tokenData.refresh_token
-          );
-          console.log(`✅ Got fresh access_token (expires in ${tokenResponse.expires_in}s)`);
-          return tokenResponse.access_token;
-        } catch (refreshError) {
-          console.log(`⚠️  Refresh token exchange failed: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`);
-          // Fall through to try other methods
-        }
-      }
-      
-      // Priority 2: Use access_token directly if found
-      if (tokenData.access_token) {
-        console.log(`✅ Found access_token directly: ${tokenData.access_token.substring(0, 30)}...`);
-        return tokenData.access_token;
-      }
-      
-      // Priority 3: Extract refresh_token from httpOnly cookies via CDP
-      console.log(`⚠️  No tokens in storage - attempting to extract from httpOnly cookies...`);
-      
-      try {
-        // Use browser_evaluate to access cookies via CDP-like functionality
-        console.log(`   🔍 Intercepting API requests to extract Authorization header...`);
-        
-        // Intercept fetch/XHR to capture Authorization headers
-        const cookieExtract = await this.client.callTool({
-          name: 'browser_evaluate',
-          arguments: {
-            function: `async () => {
-              const result = {
-                foundToken: null,
-                tokenSource: null,
-                interceptedRequests: [],
-                globalKeysChecked: [],
-                debugInfo: []
-              };
-              
-              // Method 1a: Intercept fetch API
-              const originalFetch = window.fetch;
-              let capturedToken = null;
-              
-              window.fetch = function(...args) {
-                const [url, options] = args;
-                
-                // Capture Authorization header if present
-                if (options && options.headers) {
-                  const headers = options.headers;
-                  if (headers.Authorization || headers.authorization) {
-                    capturedToken = headers.Authorization || headers.authorization;
-                    result.debugInfo.push('Captured token from fetch API');
-                  }
-                }
-                
-                return originalFetch.apply(this, args);
-              };
-              
-              // Method 1b: Intercept XMLHttpRequest (for axios/jQuery)
-              const originalOpen = XMLHttpRequest.prototype.open;
-              const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
-              
-              XMLHttpRequest.prototype.setRequestHeader = function(header, value) {
-                if (header.toLowerCase() === 'authorization' && value && value.includes('Bearer')) {
-                  capturedToken = value;
-                  result.debugInfo.push('Captured token from XMLHttpRequest');
-                }
-                return originalSetRequestHeader.apply(this, arguments);
-              };
-              
-              // Method 2: Trigger actual API calls that the app makes (with Authorization headers)
-              const apiCallsToTry = [
-                'https://detections-backend.dev.s2s.ai/api/v1/users/me',
-                window.location.origin.replace('detections.', 'detections-backend.') + '/api/v1/users/me',
-                window.location.origin + '/api/v1/users/me'
-              ];
-              
-              for (const apiUrl of apiCallsToTry) {
-                try {
-                  console.log('Attempting API call to:', apiUrl);
-                  
-                  const response = await originalFetch(apiUrl, {
-                    method: 'GET',
-                    headers: {
-                      'Accept': 'application/json',
-                      'Origin': window.location.origin,
-                      'Referer': window.location.href
-                    },
-                    credentials: 'include'
-                  });
-                  
-                  result.interceptedRequests.push({
-                    url: apiUrl,
-                    status: response.status,
-                    ok: response.ok
-                  });
-                  
-                  // If this call succeeded, the token was captured
-                  if (capturedToken) {
-                    break;
-                  }
-                } catch (e) {
-                  result.interceptedRequests.push({
-                    url: apiUrl,
-                    error: e.message
-                  });
-                }
-              }
-              
-              // Method 3: Check if app stores token in window object, React state, or global scope
-              const globalKeys = Object.keys(window).filter(k => 
-                k.toLowerCase().includes('token') || 
-                k.toLowerCase().includes('auth') ||
-                k.toLowerCase().includes('session') ||
-                k.startsWith('__NEXT') || // Next.js state
-                k.startsWith('__REACT') || // React state
-                k.includes('redux') || // Redux store
-                k.includes('store')
-              );
-              
-              result.globalKeysChecked = globalKeys;
-              result.debugInfo.push('Found ' + globalKeys.length + ' potential global keys');
-              
-              for (const key of globalKeys) {
-                try {
-                  const value = window[key];
-                  
-                  // Direct string token
-                  if (typeof value === 'string' && value.length > 50 && value.startsWith('eyJ')) {
-                    result.foundToken = value;
-                    result.tokenSource = 'window.' + key;
-                    break;
-                  }
-                  
-                  // Check if it's an object with nested tokens
-                  if (typeof value === 'object' && value !== null) {
-                    const searchObject = (obj, path = '', depth = 0) => {
-                      if (depth > 5) return false; // Limit recursion depth
-                      
-                      try {
-                        for (const [k, v] of Object.entries(obj)) {
-                          if (typeof v === 'string' && v.length > 50 && v.startsWith('eyJ')) {
-                            result.foundToken = v;
-                            result.tokenSource = 'window.' + key + path + '.' + k;
-                            return true;
-                          } else if (typeof v === 'object' && v !== null && depth < 5) {
-                            if (searchObject(v, path + '.' + k, depth + 1)) {
-                              return true;
-                            }
-                          }
-                        }
-                      } catch (e) {
-                        // Skip circular references or inaccessible properties
-                      }
-                      return false;
-                    };
-                    
-                    if (searchObject(value)) {
-                      break;
-                    }
-                  }
-                } catch (e) {
-                  // Skip inaccessible properties
-                }
-              }
-              
-              // Check captured token from fetch intercept
-              if (capturedToken) {
-                const bearer = capturedToken.replace(/^Bearer\s+/i, '');
-                if (bearer && bearer.startsWith('eyJ')) {
-                  result.foundToken = bearer;
-                  result.tokenSource = 'fetch_authorization_header';
-                }
-              }
-              
-              // Method 4: Check common storage locations one more time with broader search
-              const storageLocations = [
-                { storage: localStorage, name: 'localStorage' },
-                { storage: sessionStorage, name: 'sessionStorage' }
-              ];
-              
-              for (const { storage, name } of storageLocations) {
-                for (let i = 0; i < storage.length; i++) {
-                  const key = storage.key(i);
-                  if (key) {
-                    const value = storage.getItem(key);
-                    
-                    // Check if value itself is a JWT
-                    if (value && value.length > 50 && value.startsWith('eyJ')) {
-                      result.foundToken = value;
-                      result.tokenSource = name + '.' + key + ' (direct)';
-                      break;
-                    }
-                    
-                    // Check if value is JSON with token inside
-                    try {
-                      const parsed = JSON.parse(value);
-                      const checkObject = (obj, path = '') => {
-                        for (const [k, v] of Object.entries(obj)) {
-                          if (typeof v === 'string' && v.length > 50 && v.startsWith('eyJ')) {
-                            result.foundToken = v;
-                            result.tokenSource = name + '.' + key + path + '.' + k;
-                            return true;
-                          } else if (typeof v === 'object' && v !== null) {
-                            if (checkObject(v, path + '.' + k)) {
-                              return true;
-                            }
-                          }
-                        }
-                        return false;
-                      };
-                      if (checkObject(parsed)) {
-                        break;
-                      }
-                    } catch (e) {
-                      // Not JSON
-                    }
-                  }
-                }
-                if (result.foundToken) break;
-              }
-              
-              // Restore original functions
-              window.fetch = originalFetch;
-              XMLHttpRequest.prototype.setRequestHeader = originalSetRequestHeader;
-              
-              return JSON.stringify(result);
-            }`,
-          },
-        });
-        
-        const cookieContent = cookieExtract.content as Array<{ text?: string }> | undefined;
-        let cookiesRaw = cookieContent?.[0]?.text || '{}';
-        
-        // Parse MCP response
-        if (cookiesRaw.includes('### Result')) {
-          const lines = cookiesRaw.split('\n');
-          const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
-          if (resultIndex !== -1 && lines[resultIndex + 1]) {
-            cookiesRaw = lines[resultIndex + 1].trim();
-          }
-        }
-        
-        // Remove surrounding quotes and unescape
-        cookiesRaw = cookiesRaw.replace(/^["']|["']$/g, '');
-        cookiesRaw = cookiesRaw.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-        
-        const tokenData = JSON.parse(cookiesRaw);
-        
-        console.log(`📦 Intercepted requests: ${tokenData.interceptedRequests.length}`);
-        console.log(`📦 Global keys checked: ${tokenData.globalKeysChecked.length}`);
-        if (tokenData.globalKeysChecked.length > 0) {
-          console.log(`   Keys: ${tokenData.globalKeysChecked.slice(0, 10).join(', ')}${tokenData.globalKeysChecked.length > 10 ? '...' : ''}`);
-        }
-        if (tokenData.debugInfo.length > 0) {
-          tokenData.debugInfo.forEach((info: string) => console.log(`   ℹ️  ${info}`));
-        }
-        
-        // Priority 3a: Use token from any source if found!
-        if (tokenData.foundToken) {
-          console.log(`✅ Found access_token via: ${tokenData.tokenSource}`);
-          console.log(`✅ Token preview: ${tokenData.foundToken.substring(0, 30)}...`);
-          return tokenData.foundToken;
-        }
-        
-        console.log(`⚠️  No tokens in accessible cookies - tokens must be in httpOnly cookies`);
-        console.log(`   💡 Attempting password grant flow as final fallback...`);
-        
-        // Priority 3c: Use password grant flow as last resort
-        const passwordToken = await this.getPasswordGrantToken(auth0Domain, clientId, clientSecret, email, password);
-        console.log(`✅ Got password grant access_token: ${passwordToken.substring(0, 30)}...`);
-        return passwordToken;
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        
-        // Provide helpful error message
-        if (errorMsg.includes('unauthorized_client') || errorMsg.includes('Grant type')) {
-          throw new Error(
-            `❌ Token extraction failed:\n` +
-            `   • Tokens are in httpOnly cookies (secure, but inaccessible to JavaScript)\n` +
-            `   • Password Grant is not enabled in Auth0\n\n` +
-            `📋 To fix, enable Password Grant in Auth0:\n` +
-            `   1. Go to Auth0 Dashboard → Applications → Your App\n` +
-            `   2. Advanced Settings → Grant Types → Check "Password"\n` +
-            `   3. Save Changes\n\n` +
-            `📚 See AUTH0_PASSWORD_GRANT_SETUP.md for details.\n\n` +
-            `Original error: ${errorMsg}`
-          );
-        }
-        
-        throw new Error(`Token extraction failed: ${errorMsg}`);
-      }
+      console.log(`✅ Access token received: ${accessToken.substring(0, 30)}...`);
+      return accessToken;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Login failed for ${email}: ${errorMessage}`);
@@ -808,49 +432,89 @@ export class MCPClient {
 
   /**
    * Make an authenticated API call from the browser context
-   * The browser automatically includes auth cookies
+   * The browser automatically includes httpOnly cookies - just like a real user!
    */
   async makeApiCall(url: string, method: string, body?: any): Promise<any> {
     if (!this.client) {
       throw new Error('MCP client not connected. Call connect() first.');
     }
 
-    const escapedUrl = url.replace(/'/g, "\\'");
+    // Escape URL and method for safe string interpolation
+    const escapedUrl = url.replace(/'/g, "\\'").replace(/"/g, '\\"');
     const escapedMethod = method.replace(/'/g, "\\'");
-    const bodyJson = body ? JSON.stringify(body).replace(/'/g, "\\'") : 'null';
+    
+    // Serialize body to JSON string (will be parsed in the browser context)
+    const bodyJson = body ? JSON.stringify(body) : null;
+    // Escape the JSON string for safe interpolation
+    const escapedBodyJson = bodyJson ? bodyJson.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"') : null;
 
     const result = await this.client.callTool({
       name: 'browser_evaluate',
       arguments: {
         function: `async () => {
           try {
-            const response = await fetch('${escapedUrl}', {
+            const bodyData = ${escapedBodyJson ? `JSON.parse("${escapedBodyJson}")` : 'null'};
+            
+            console.log('🔍 Making API call:', {
+              url: '${escapedUrl}',
+              method: '${escapedMethod}',
+              bodyPreview: bodyData ? JSON.stringify(bodyData).substring(0, 100) : 'null',
+              origin: window.location.origin
+            });
+            
+            const fetchOptions = {
               method: '${escapedMethod}',
               headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
               },
-              body: ${bodyJson ? `'${bodyJson}'` : 'null'},
-              credentials: 'include' // Include cookies
+              credentials: 'include', // Include httpOnly cookies automatically!
+              mode: 'cors' // Explicitly request CORS
+            };
+            
+            if (bodyData) {
+              fetchOptions.body = JSON.stringify(bodyData);
+            }
+
+            const response = await fetch('${escapedUrl}', fetchOptions);
+            
+            console.log('✅ API response:', {
+              status: response.status,
+              ok: response.ok,
+              statusText: response.statusText,
+              headers: Object.fromEntries([...response.headers.entries()])
             });
 
             let responseData;
-            try {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
               responseData = await response.json();
-            } catch (e) {
+            } else {
               responseData = await response.text();
             }
 
             return JSON.stringify({
               status: response.status,
               ok: response.ok,
-              data: responseData
+              data: responseData,
+              headers: {
+                contentType: response.headers.get('content-type')
+              }
             });
           } catch (error) {
+            console.error('❌ API call failed:', {
+              error: error.message,
+              name: error.name,
+              stack: error.stack,
+              url: '${escapedUrl}'
+            });
+            
             return JSON.stringify({
               status: 0,
               ok: false,
-              error: error.message || String(error)
+              error: error.message || String(error),
+              errorName: error.name,
+              stack: error.stack
             });
           }
         }`,
@@ -870,11 +534,15 @@ export class MCPClient {
     }
 
     rawText = rawText.trim().replace(/^["']|["']$/g, '');
+    
+    // Unescape the JSON
+    rawText = rawText.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
 
     let response;
     try {
       response = JSON.parse(rawText);
     } catch (parseError) {
+      console.error(`Failed to parse API response:`, rawText.substring(0, 500));
       throw new Error(`Failed to parse API response: ${rawText.substring(0, 200)}`);
     }
 

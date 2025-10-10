@@ -10,61 +10,28 @@ export class Config {
     return (process.env.ENVIRONMENT || 'dev') as Environment;
   }
 
-  // Admin Credentials
-  static get adminEmail(): string {
-    const email = process.env.ADMIN_EMAIL;
-    if (!email) {
-      throw new Error('ADMIN_EMAIL environment variable is required');
+  // Admin Token
+  static get adminToken(): string | null {
+    const token = process.env.ADMIN_TOKEN;
+    if (!token || token === 'your-admin-bearer-token-here') {
+      return null;
     }
-    return email;
+    return token;
   }
 
-  static get adminPassword(): string {
-    const password = process.env.ADMIN_PASSWORD;
-    if (!password) {
-      throw new Error('ADMIN_PASSWORD environment variable is required');
-    }
-    return password;
-  }
-
-  // Auth0 Configuration
-  static get auth0Domain(): string {
-    const domain = process.env.AUTH0_DOMAIN;
-    if (!domain) {
-      throw new Error('AUTH0_DOMAIN environment variable is required');
-    }
-    return domain;
-  }
-
-  static get auth0ClientId(): string {
-    const clientId = process.env.AUTH0_CLIENT_ID;
-    if (!clientId) {
-      throw new Error('AUTH0_CLIENT_ID environment variable is required');
-    }
-    return clientId;
-  }
-
-  static get auth0ClientSecret(): string {
-    const clientSecret = process.env.AUTH0_CLIENT_SECRET;
-    if (!clientSecret) {
-      throw new Error('AUTH0_CLIENT_SECRET environment variable is required');
-    }
-    return clientSecret;
-  }
-
-  // User Password Lookup
-  static getUserPassword(userId: string): string | null {
+  // User Token Lookup
+  static getUserToken(userId: string): string | null {
     // Convert userId to environment variable format
-    // e.g., "sigmahq" -> "USER_PASSWORD_SIGMAHQ"
-    const envKey = `USER_PASSWORD_${userId.toUpperCase()}`;
-    const password = process.env[envKey];
+    // e.g., "sigmahq" -> "USER_TOKEN_SIGMAHQ"
+    const envKey = `USER_TOKEN_${userId.toUpperCase()}`;
+    const token = process.env[envKey];
 
-    // Return null if not set or is placeholder
-    if (!password || password === 'REPLACE_AFTER_VERIFICATION') {
+    // Return null if not set or is placeholder/skip
+    if (!token || token === 'SKIP' || token === 'your-user-bearer-token-here') {
       return null;
     }
 
-    return password;
+    return token;
   }
 
   // API URLs
@@ -93,14 +60,15 @@ export class Config {
     return envMap[type][environment];
   }
 
-  // Validate that all required environment variables are set
+  // Validate that admin token is set
   static validate(): void {
-    const required = ['ADMIN_EMAIL', 'ADMIN_PASSWORD'];
-    const missing = required.filter((key) => !process.env[key]);
-
-    if (missing.length > 0) {
+    if (!this.adminToken) {
       throw new Error(
-        `Missing required environment variables: ${missing.join(', ')}`,
+        `Missing ADMIN_TOKEN environment variable.\n` +
+        `Get your token from Chrome DevTools:\n` +
+        `1. Login to the app\n` +
+        `2. Open DevTools → Network tab\n` +
+        `3. Copy the Authorization header from any API call`
       );
     }
   }

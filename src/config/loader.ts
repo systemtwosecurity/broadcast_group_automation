@@ -11,8 +11,8 @@ export class ConfigLoader {
   }
 
   /**
-   * Load users from users.json (emails only, no passwords)
-   * Admin email and all passwords are loaded from environment variables
+   * Load users from users.json (emails only)
+   * Tokens are loaded from environment variables separately
    */
   loadUsers(): UsersConfig {
     try {
@@ -20,31 +20,10 @@ export class ConfigLoader {
       const content = readFileSync(usersPath, 'utf-8');
       const users: UsersConfig = JSON.parse(content);
 
-      // Override admin email and password from environment variables
-      users.admin.email = Config.adminEmail;
-      users.admin.password = Config.adminPassword;
-      
-      // Add passwords from environment variables for regular users
-      users.users = users.users.map(user => ({
-        ...user,
-        password: Config.getUserPassword(user.id) || undefined
-      }));
-
       return users;
     } catch (error: any) {
       throw new Error(`Failed to load users configuration: ${error.message}`);
     }
-  }
-
-  /**
-   * Get users with passwords from environment variables
-   */
-  getUsersWithPasswords(): User[] {
-    const usersConfig = this.loadUsers();
-    return usersConfig.users.map(user => ({
-      ...user,
-      password: Config.getUserPassword(user.id) || undefined
-    }));
   }
 
   loadGroups(): GroupsConfig {

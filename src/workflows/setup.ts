@@ -37,18 +37,19 @@ export class SetupWorkflow {
     }
 
     // Categorize users
+    const { Config } = await import('../config/config.js');
     const readyUsers: User[] = [];
     const notReadyUsers: User[] = [];
     const alreadyDoneUsers: User[] = [];
 
     for (const user of selectedUsers) {
-      // Check password
-      const hasPassword = user.password && user.password !== "REPLACE_AFTER_VERIFICATION";
+      // Check token
+      const hasToken = !!Config.getUserToken(user.id);
       
       // Check database
       const status = this.db.getUserStatus(user.id, this.environment);
       
-      if (!hasPassword) {
+      if (!hasToken) {
         notReadyUsers.push(user);
       } else if (status.groupCreated && status.sourceCreated) {
         alreadyDoneUsers.push(user);
@@ -61,8 +62,8 @@ export class SetupWorkflow {
     console.log(`📊 Status Check:`);
     console.log(`   ✅ Ready to setup: ${readyUsers.length}`);
     if (notReadyUsers.length > 0) {
-      console.log(`   ⏭️  Skipping (no password): ${notReadyUsers.length}`);
-      notReadyUsers.forEach(u => console.log(`      - ${u.id} (${u.email})`));
+      console.log(`   ⏭️  Skipping (no token): ${notReadyUsers.length}`);
+      notReadyUsers.forEach(u => console.log(`      - ${u.id} (${u.email}) - Set USER_TOKEN_${u.id.toUpperCase()} in .env`));
     }
     if (alreadyDoneUsers.length > 0) {
       console.log(`   📝 Already complete: ${alreadyDoneUsers.length}`);
@@ -76,8 +77,6 @@ export class SetupWorkflow {
     }
 
     // Process each ready user
-    const { Config } = await import('../config/config.js');
-    const appUrl = Config.getApiUrl('app', this.environment);
     const results = {
       success: [] as string[],
       failed: [] as string[],
@@ -90,22 +89,15 @@ export class SetupWorkflow {
       console.log(`─────────────────────────────────────`);
 
       try {
-        // Force kill and restart MCP server for true isolation
-        console.log(`🔄 Restarting browser for fresh session (${user.id})...`);
-        await this.mcpClient.close();
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for process cleanup
-        await this.mcpClient.connect();
+        // Get user token from environment variable
+        const userToken = Config.getUserToken(user.id);
+        if (!userToken) {
+          console.log(`⚠️  No token for ${user.id}, skipping...\n`);
+          results.skipped.push(user.id);
+          continue;
+        }
         
-        // Get user token
-        console.log(`🔐 Logging in as ${user.email}...`);
-        const userToken = await this.mcpClient.login(
-          `${appUrl}/login`,
-          user.email,
-          user.password!,
-          Config.auth0Domain,
-          Config.auth0ClientId,
-          Config.auth0ClientSecret
-        );
+        console.log(`🔑 Using token for ${user.email}...`);
 
         // Find group config
         const groupConfig = groupsConfig.groups.find((g: GroupConfig) => g.id === user.id);
@@ -205,8 +197,9 @@ export class SetupWorkflow {
     if (results.skipped.length > 0) {
       const skippedIds = results.skipped.join(',');
       console.log("💡 To setup skipped groups:");
-      console.log("   1. Update config/users.json with passwords");
-      console.log(`   2. Run: npm run dev -- setup --env ${this.environment} --groups ${skippedIds}\n`);
+      console.log("   1. Get tokens from Chrome DevTools (Network tab → Authorization header)");
+      console.log("   2. Add USER_TOKEN_<ID> variables to .env");
+      console.log(`   3. Run: npm run dev -- setup --env ${this.environment} --groups ${skippedIds}\n`);
     }
   }
 }

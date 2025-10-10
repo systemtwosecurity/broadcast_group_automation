@@ -62,29 +62,23 @@ export class InvitationWorkflow {
       return;
     }
 
-    // Get admin token with completely fresh browser instance
-    console.log("=== Admin Login ===");
+    // Get admin token from environment variable
+    console.log("=== Sending Invitations ===");
     const { Config } = await import('../config/config.js');
-    const appUrl = Config.getApiUrl('app', this.environment);
+    const adminToken = Config.adminToken;
     
-    // Force kill and restart MCP server for true isolation
-    console.log("🔄 Restarting browser for fresh session...");
-    await this.mcpClient.close();
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for process cleanup
-    await this.mcpClient.connect();
-    
-    const adminToken = await this.mcpClient.login(
-      `${appUrl}/login`,
-      usersConfig.admin.email,
-      usersConfig.admin.password!,
-      Config.auth0Domain,
-      Config.auth0ClientId,
-      Config.auth0ClientSecret
-    );
+    if (!adminToken) {
+      throw new Error(
+        'ADMIN_TOKEN not set in .env file.\n' +
+        'Get your token from Chrome DevTools:\n' +
+        '1. Login to the app\n' +
+        '2. Open DevTools → Network tab\n' +
+        '3. Copy the Authorization: Bearer token from any API call'
+      );
+    }
 
-    // Send invitations using the bearer token
-    console.log("\n=== Sending Invitations ===");
     const needsInviteEmails = needsInvite.map(u => u.email);
+    console.log(`📧 Inviting ${needsInviteEmails.length} users...`);
     
     const axios = (await import('axios')).default;
     const response = await axios.post(

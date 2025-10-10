@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import { StateDatabase } from '../database/db.js';
-import { MCPClient } from '../mcp/client.js';
 import { DetectionsAPI } from '../api/detections.js';
 import { IntegrationsAPI } from '../api/integrations.js';
 import { ConfigLoader } from '../config/loader.js';
@@ -43,7 +42,6 @@ program
     }
     
     const db = new StateDatabase();
-    const mcpClient = new MCPClient();
     const configLoader = new ConfigLoader();
     
     const { Config } = await import('../config/config.js');
@@ -51,15 +49,12 @@ program
     const detectionsAPI = new DetectionsAPI(detectionsUrl);
     
     try {
-      await mcpClient.connect();
-      
-      const workflow = new InvitationWorkflow(db, mcpClient, detectionsAPI, configLoader, environment);
+      const workflow = new InvitationWorkflow(db, null as any, detectionsAPI, configLoader, environment);
       await workflow.execute({ groupIds });
     } catch (error: any) {
       console.error(`\n❌ Error: ${error.message}\n`);
       process.exit(1);
     } finally {
-      await mcpClient.close();
       db.close();
     }
   });
@@ -91,7 +86,6 @@ program
     }
     
     const db = new StateDatabase();
-    const mcpClient = new MCPClient();
     const configLoader = new ConfigLoader();
     
     const { Config } = await import('../config/config.js');
@@ -101,15 +95,12 @@ program
     const integrationsAPI = new IntegrationsAPI(integrationsUrl);
     
     try {
-      await mcpClient.connect();
-      
-      const workflow = new SetupWorkflow(db, mcpClient, detectionsAPI, integrationsAPI, configLoader, environment);
+      const workflow = new SetupWorkflow(db, null as any, detectionsAPI, integrationsAPI, configLoader, environment);
       await workflow.execute({ groupIds });
     } catch (error: any) {
       console.error(`\n❌ Error: ${error.message}\n`);
       process.exit(1);
     } finally {
-      await mcpClient.close();
       db.close();
     }
   });
