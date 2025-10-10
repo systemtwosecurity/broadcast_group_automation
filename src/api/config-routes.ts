@@ -4,17 +4,19 @@ import { join } from 'path';
 
 const router = Router();
 
-// Get all tokens (from .env)
-router.get('/tokens', (req: Request, res: Response) => {
+// Get all tokens (from .env) for a specific environment
+router.get('/tokens/:environment', (req: Request, res: Response) => {
   try {
+    const environment = req.params.environment.toUpperCase(); // DEV, QA, PROD
     const envPath = join(process.cwd(), '.env');
     const envContent = readFileSync(envPath, 'utf-8');
     
     const tokens: any[] = [];
-    const adminTokenMatch = envContent.match(/ADMIN_TOKEN=(.+)/);
+    const adminTokenMatch = envContent.match(new RegExp(`ADMIN_TOKEN_${environment}=(.+)`));
+    const adminTokenFallback = envContent.match(/ADMIN_TOKEN=(.+)/);
     
-    // Extract user tokens (match uppercase letters, numbers, and underscores)
-    const userTokenMatches = envContent.matchAll(/USER_TOKEN_([A-Z0-9_]+)=(.+)/g);
+    // Extract environment-specific user tokens
+    const userTokenMatches = envContent.matchAll(new RegExp(`USER_TOKEN_([A-Z0-9_]+)_${environment}=(.+)`, 'g'));
     for (const match of userTokenMatches) {
       const id = match[1].toLowerCase();
       const token = match[2].trim();
@@ -24,15 +26,19 @@ router.get('/tokens', (req: Request, res: Response) => {
       const usersContent = JSON.parse(readFileSync(usersPath, 'utf-8'));
       const user = usersContent.users.find((u: any) => u.id === id);
       
+      // Generate environment-specific email
+      const emailSuffix = environment.toLowerCase();
+      const email = user?.email.replace(/_dev@/, `_${emailSuffix}@`) || `${id}_${emailSuffix}@unknown`;
+      
       tokens.push({
         id,
-        email: user?.email || `${id}@unknown`,
+        email,
         token,
       });
     }
     
     res.json({
-      adminToken: adminTokenMatch ? adminTokenMatch[1].trim() : '',
+      adminToken: (adminTokenMatch ? adminTokenMatch[1].trim() : (adminTokenFallback ? adminTokenFallback[1].trim() : '')),
       tokens,
     });
   } catch (error: any) {
@@ -40,22 +46,23 @@ router.get('/tokens', (req: Request, res: Response) => {
   }
 });
 
-// Save/Update token
+// Save/Update token with environment
 router.post('/tokens', (req: Request, res: Response) => {
   try {
-    const { id, email, token } = req.body;
+    const { id, email, token, environment } = req.body;
     
-    if (!id) {
-      return res.status(400).json({ error: 'ID is required' });
+    if (!id || !environment) {
+      return res.status(400).json({ error: 'ID and environment are required' });
     }
     
     // If token is empty or not provided, use "SKIP"
     const tokenValue = token && token.trim() !== '' ? token.trim() : 'SKIP';
+    const env = environment.toUpperCase(); // DEV, QA, PROD
     
     const envPath = join(process.cwd(), '.env');
     let envContent = readFileSync(envPath, 'utf-8');
     
-    const envKey = id === 'admin' ? 'ADMIN_TOKEN' : `USER_TOKEN_${id.toUpperCase()}`;
+    const envKey = id === 'admin' ? `ADMIN_TOKEN_${env}` : `USER_TOKEN_${id.toUpperCase()}_${env}`;
     const envLine = `${envKey}=${tokenValue}`;
     
     // Check if key exists
@@ -77,8 +84,8 @@ router.post('/tokens', (req: Request, res: Response) => {
       
       const userIndex = usersContent.users.findIndex((u: any) => u.id === id);
       if (userIndex === -1) {
-        // Add new user
-        usersContent.users.push({ id, email });
+        // Add new user (store base email, will be transformed per environment)
+        usersContent.users.push({ id, email: email.replace(/_qa@|_prod@|_dev@/, '_dev@') });
         writeFileSync(usersPath, JSON.stringify(usersContent, null, 2));
       }
     }
@@ -89,15 +96,16 @@ router.post('/tokens', (req: Request, res: Response) => {
   }
 });
 
-// Delete token
-router.delete('/tokens/:id', (req: Request, res: Response) => {
+// Delete token for specific environment
+router.delete('/tokens/:environment/:id', (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id, environment } = req.params;
+    const env = environment.toUpperCase();
     
     const envPath = join(process.cwd(), '.env');
     let envContent = readFileSync(envPath, 'utf-8');
     
-    const envKey = id === 'admin' ? 'ADMIN_TOKEN' : `USER_TOKEN_${id.toUpperCase()}`;
+    const envKey = id === 'admin' ? `ADMIN_TOKEN_${env}` : `USER_TOKEN_${id.toUpperCase()}_${env}`;
     const regex = new RegExp(`^${envKey}=.+$\\n?`, 'm');
     
     envContent = envContent.replace(regex, '');

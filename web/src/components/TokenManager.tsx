@@ -12,7 +12,7 @@ interface TokenManagerProps {
   environment: string;
 }
 
-export function TokenManager(_props: TokenManagerProps) {
+export function TokenManager({ environment }: TokenManagerProps) {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [adminToken, setAdminToken] = useState('');
   const [showTokens, setShowTokens] = useState<{ [key: string]: boolean }>({});
@@ -22,12 +22,12 @@ export function TokenManager(_props: TokenManagerProps) {
 
   useEffect(() => {
     loadTokens();
-  }, []);
+  }, [environment]); // Reload when environment changes
 
   const loadTokens = async () => {
     try {
-      const { data } = await axios.get('/api/tokens');
-      console.log('Loaded tokens:', data);
+      const { data } = await axios.get(`/api/tokens/${environment}`);
+      console.log('Loaded tokens for', environment, ':', data);
       setTokens(data.tokens || []);
       setAdminToken(data.adminToken || '');
     } catch (error: any) {
@@ -38,8 +38,8 @@ export function TokenManager(_props: TokenManagerProps) {
 
   const saveToken = async (tokenData: Token) => {
     try {
-      await axios.post('/api/tokens', tokenData);
-      showMessage('success', 'Token saved successfully');
+      await axios.post('/api/tokens', { ...tokenData, environment });
+      showMessage('success', `Token saved for ${environment.toUpperCase()}`);
       loadTokens();
       setEditingToken(null);
     } catch (error: any) {
@@ -60,11 +60,11 @@ export function TokenManager(_props: TokenManagerProps) {
   };
 
   const deleteToken = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this token?')) return;
+    if (!confirm(`Are you sure you want to delete this token for ${environment.toUpperCase()}?`)) return;
     
     try {
-      await axios.delete(`/api/tokens/${id}`);
-      showMessage('success', 'Token deleted');
+      await axios.delete(`/api/tokens/${environment}/${id}`);
+      showMessage('success', `Token deleted for ${environment.toUpperCase()}`);
       loadTokens();
     } catch (error: any) {
       showMessage('error', 'Failed to delete token');
@@ -102,6 +102,16 @@ export function TokenManager(_props: TokenManagerProps) {
 
   return (
     <div className="space-y-6">
+      {/* Environment Indicator */}
+      <div className="p-4 bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30 rounded-lg">
+        <p className="text-lg font-semibold text-white">
+          🔧 Managing Tokens for: <span className="text-purple-300">{environment.toUpperCase()}</span>
+        </p>
+        <p className="text-sm text-white/70 mt-1">
+          Tokens are environment-specific. Switch environments to manage different token sets.
+        </p>
+      </div>
+
       {/* Info Banner */}
       <div className="p-4 bg-blue-500/10 dark:bg-blue-900/20 border border-blue-500/30 dark:border-blue-700 rounded-lg">
         <p className="text-sm text-blue-200 dark:text-blue-300">

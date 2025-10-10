@@ -68,8 +68,8 @@ export function GroupManager({ environment }: GroupManagerProps) {
     }
   };
 
-  const generateEmail = (groupId: string, env: string): string => {
-    return `groups+${groupId}_${env}@detections.ai`;
+  const generateEmail = (groupId: string): string => {
+    return `groups+${groupId}_${environment}@detections.ai`;
   };
 
   const createNewGroup = (): GroupConfig => {
@@ -254,14 +254,14 @@ export function GroupManager({ environment }: GroupManagerProps) {
         </div>
 
         {/* Auto-generated Email */}
-        <div>
-          <label className="block text-sm font-medium text-white/70 dark:text-gray-300 mb-2">
-            Generated Email (Read-only)
-          </label>
-          <div className="px-4 py-2 bg-blue-500/10 dark:bg-blue-900/20 border border-blue-500/30 dark:border-blue-700 rounded-lg text-blue-300 dark:text-blue-400 font-mono text-sm">
-            {formData.id ? generateEmail(formData.id, environment) : 'Enter Group ID to see email'}
+          <div>
+            <label className="block text-sm font-medium text-white/70 dark:text-gray-300 mb-2">
+              Generated Email (Read-only)
+            </label>
+            <div className="px-4 py-2 bg-blue-500/10 dark:bg-blue-900/20 border border-blue-500/30 dark:border-blue-700 rounded-lg text-blue-300 dark:text-blue-400 font-mono text-sm">
+              {formData.id ? generateEmail(formData.id) : 'Enter Group ID to see email'}
+            </div>
           </div>
-        </div>
 
         {/* Group Settings */}
         <div className="space-y-4">
@@ -344,6 +344,16 @@ export function GroupManager({ environment }: GroupManagerProps) {
 
   return (
     <div className="space-y-6">
+      {/* Environment Indicator */}
+      <div className="p-4 bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30 rounded-lg">
+        <p className="text-lg font-semibold text-white">
+          🏗️ Managing Groups for: <span className="text-purple-300">{environment.toUpperCase()}</span>
+        </p>
+        <p className="text-sm text-white/70 mt-1">
+          Email aliases and configuration are environment-specific.
+        </p>
+      </div>
+
       {message && (
         <div
           className={`p-4 rounded-lg ${
@@ -405,7 +415,7 @@ export function GroupManager({ environment }: GroupManagerProps) {
                     <h3 className="text-lg font-semibold text-white dark:text-gray-100">{group.name}</h3>
                     <p className="text-sm text-white/70 dark:text-gray-300 font-mono">{group.id}</p>
                     <p className="text-sm text-white/50 dark:text-gray-400 mt-1">
-                      Email: {generateEmail(group.id, environment)}
+                      Email: {generateEmail(group.id)}
                     </p>
                     <p className="text-sm text-white/50 dark:text-gray-400 break-all">
                       Source: {githubUrl}
