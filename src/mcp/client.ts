@@ -157,6 +157,162 @@ export class MCPClient {
       
       console.log(`   🌐 Current page: ${currentPageUrl}`);
       
+      // If we're already logged in (on app homepage, not auth0.com), click login button
+      if (!currentPageUrl.includes('/login') && !currentPageUrl.includes('auth0.com')) {
+        console.log(`   🔄 Already on app page, clicking login button to re-authenticate...`);
+        
+        // Try to find and click the login button/link
+        try {
+          // Try clicking a link to /login first
+          await this.client.callTool({
+            name: 'browser_evaluate',
+            arguments: {
+              function: `() => {
+                const loginLink = document.querySelector('a[href="/login"]') || 
+                                 document.querySelector('a[href*="login"]') ||
+                                 Array.from(document.querySelectorAll('button, a')).find(el => 
+                                   el.textContent?.toLowerCase().includes('login') ||
+                                   el.textContent?.toLowerCase().includes('log in') ||
+                                   el.textContent?.toLowerCase().includes('sign in')
+                                 );
+                if (loginLink) {
+                  loginLink.click();
+                  return 'CLICKED';
+                }
+                return 'NOT_FOUND';
+              }`,
+            },
+          });
+        } catch (clickError) {
+          console.log(`   ⚠️  Could not find login button, attempting to navigate to /login...`);
+          await this.client.callTool({
+            name: 'browser_navigate',
+            arguments: { url: `${loginUrl}` },
+          });
+        }
+        
+        // Wait for Auth0 redirect
+        await this.client.callTool({
+          name: 'browser_wait_for',
+          arguments: { time: 5 },
+        });
+        
+        // Check if we're now on the login page
+        const afterClickUrl = await this.client.callTool({
+          name: 'browser_evaluate',
+          arguments: {
+            function: `() => window.location.href`,
+          },
+        });
+        
+        const afterClickContent = afterClickUrl.content as Array<{ text?: string }> | undefined;
+        let afterClickPageUrl = afterClickContent?.[0]?.text || '';
+        if (afterClickPageUrl.includes('### Result')) {
+          const lines = afterClickPageUrl.split('\n');
+          const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
+          if (resultIndex !== -1 && lines[resultIndex + 1]) {
+            afterClickPageUrl = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
+          }
+        }
+        
+        console.log(`   🌐 After clicking login: ${afterClickPageUrl}`);
+        
+        // If still not on auth page, try extracting tokens as fallback
+        if (!afterClickPageUrl.includes('/login') && !afterClickPageUrl.includes('auth0.com')) {
+          console.log(`   ⚠️  Still on app page after clicking login, extracting existing tokens...`);
+        
+        // Extract tokens from storage
+        const tokenExtract = await this.client.callTool({
+          name: 'browser_evaluate',
+          arguments: {
+            function: `() => {
+              const tokens = {
+                access_token: null,
+                refresh_token: null,
+                storage_keys: []
+              };
+              
+              // Check localStorage
+              for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key) {
+                  tokens.storage_keys.push('localStorage.' + key);
+                  const value = localStorage.getItem(key);
+                  if (key.includes('access') || key.includes('token')) {
+                    if (value && value.length > 20 && value.startsWith('eyJ')) {
+                      tokens.access_token = value;
+                    }
+                  }
+                  if (key.includes('refresh')) {
+                    if (value && value.length > 20) {
+                      tokens.refresh_token = value;
+                    }
+                  }
+                }
+              }
+              
+              // Check sessionStorage
+              for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                if (key) {
+                  tokens.storage_keys.push('sessionStorage.' + key);
+                  const value = sessionStorage.getItem(key);
+                  if (key.includes('access') || key.includes('token')) {
+                    if (value && value.length > 20 && value.startsWith('eyJ')) {
+                      tokens.access_token = value;
+                    }
+                  }
+                  if (key.includes('refresh')) {
+                    if (value && value.length > 20) {
+                      tokens.refresh_token = value;
+                    }
+                  }
+                }
+              }
+              
+              return JSON.stringify(tokens);
+            }`,
+          },
+        });
+        
+        const tokenContent = tokenExtract.content as Array<{ text?: string }> | undefined;
+        let tokensRaw = tokenContent?.[0]?.text || '{}';
+        
+        if (tokensRaw.includes('### Result')) {
+          const lines = tokensRaw.split('\n');
+          const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
+          if (resultIndex !== -1 && lines[resultIndex + 1]) {
+            tokensRaw = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
+          }
+        }
+        
+        const tokens = JSON.parse(tokensRaw);
+        
+        console.log(`📦 Available storage keys: ${tokens.storage_keys.join(', ')}`);
+        
+        if (tokens.refresh_token) {
+          console.log(`✅ Found refresh_token: ${tokens.refresh_token.substring(0, 30)}...`);
+          const tokenResponse = await this.refreshAccessToken(
+            auth0Domain,
+            clientId,
+            clientSecret,
+            tokens.refresh_token
+          );
+          return tokenResponse.access_token;
+        }
+        
+        if (tokens.access_token) {
+          console.log(`✅ Found access_token directly: ${tokens.access_token.substring(0, 30)}...`);
+          return tokens.access_token;
+        }
+        
+          throw new Error('Already logged in but no tokens found in storage');
+        }
+        // If we successfully navigated to login/auth page after clicking, continue with login flow below
+        currentPageUrl = afterClickPageUrl;
+      }
+      
+      // At this point, we should be on the Auth0 login page
       // Wait a bit longer for the page to stabilize
       await this.client.callTool({
         name: 'browser_wait_for',
