@@ -94,7 +94,51 @@ export class MCPClient {
     console.log(`🔐 Logging in as ${email}...`);
 
     try {
-      // Navigate directly to login page (will auto-redirect if already logged in)
+      // Navigate to app first to establish context, then clear everything
+      const appBaseUrl = loginUrl.replace('/login', '');
+      console.log(`   🧹 Clearing browser data for fresh session...`);
+      await this.client.callTool({
+        name: 'browser_navigate',
+        arguments: { url: appBaseUrl },
+      });
+      
+      await this.client.callTool({
+        name: 'browser_wait_for',
+        arguments: { time: 1 },
+      });
+      
+      // Clear all browser data
+      await this.client.callTool({
+        name: 'browser_evaluate',
+        arguments: {
+          function: `() => {
+            // Clear all storage
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Clear all cookies for current domain and parent domains
+            document.cookie.split(';').forEach(cookie => {
+              const name = cookie.split('=')[0].trim();
+              if (name) {
+                // Current domain
+                document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+                document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + window.location.hostname;
+                
+                // Parent domains (.s2s.ai, .dev.s2s.ai, etc.)
+                const parts = window.location.hostname.split('.');
+                for (let i = 0; i < parts.length - 1; i++) {
+                  const domain = parts.slice(i).join('.');
+                  document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.' + domain;
+                }
+              }
+            });
+            
+            return 'CLEARED';
+          }`,
+        },
+      });
+      
+      // Now navigate to login page with clean slate
       console.log(`   🔗 Navigating to login page...`);
       await this.client.callTool({
         name: 'browser_navigate',
@@ -574,9 +618,36 @@ export class MCPClient {
     return response.data;
   }
 
+  /**
+   * Close the MCP client and kill the browser
+   * This ensures a fresh session on next connect
+   */
   async close() {
+    try {
+      // Try to close the browser explicitly before disconnecting
+      if (this.client) {
+        try {
+          console.log('   🔒 Closing browser session...');
+          await this.client.callTool({
+            name: 'browser_close',
+            arguments: {},
+          });
+        } catch (error) {
+          // Browser might already be closed, that's fine
+        }
+      }
+    } catch (error) {
+      // Ignore errors during cleanup
+    }
+
+    // Close the MCP client connection
     if (this.client) {
       await this.client.close();
+      this.client = null;
+    }
+    if (this.transport) {
+      this.transport.close();
+      this.transport = null;
     }
   }
 }
