@@ -35,10 +35,10 @@
     },
     {
       "id": "yara_100days",
-      "name": "100 Days of YARA 2025",
+      "name": "100 Days of YARA 2025 Private",
       "group": {
-        "name": "100 Days of YARA 2025",
-        "description": "100 Days of YARA 2025",
+        "name": "100 Days of YARA 2025 Private",
+        "description": "100 Days of YARA 2025 Private",
         "type": "private",
         "settings": {
           "allow_comments": true,
@@ -67,9 +67,9 @@
     },
     {
       "id": "googlesecops",
-      "name": "Google SecOps",
+      "name": "Google SecOps Private",
       "group": {
-        "name": "Google SecOps",
+        "name": "Google SecOps Private",
         "description": "Google SecOps Private",
         "type": "private",
         "settings": {

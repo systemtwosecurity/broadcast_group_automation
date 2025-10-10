@@ -126,6 +126,10 @@ export class SetupWorkflow {
                   }
                 }
               );
+              
+              // Debug: Log the full response structure
+              console.log(`   📦 API Response:`, JSON.stringify(groupResponse.data, null, 2));
+              
               // API returns { data: { id: "..." } }
               groupApiId = groupResponse.data.data?.id || groupResponse.data.id;
             } catch (error: any) {
