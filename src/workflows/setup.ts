@@ -92,7 +92,7 @@ export class SetupWorkflow {
       try {
         // Get user token
         console.log(`🔐 Logging in as ${user.email}...`);
-        const userToken = await this.mcpClient.login(
+        await this.mcpClient.login(
           `${appUrl}/login`,
           user.email,
           user.password!
@@ -111,10 +111,16 @@ export class SetupWorkflow {
         
         if (!groupApiId) {
           console.log(`🏗️  Creating group: ${groupConfig.name}...`);
-          const groupResponse = await this.detectionsAPI.createGroup(userToken, groupConfig.group);
-          groupApiId = groupResponse.data.id;
+          const groupResponse = await this.mcpClient.makeApiCall(
+            `${Config.getApiUrl('detections', this.environment)}/api/v1/groups`,
+            'POST',
+            groupConfig.group
+          );
+          groupApiId = groupResponse.id;
           
-          this.db.recordGroupCreation(user.id, this.environment, groupApiId, groupConfig.name);
+          if (groupApiId) {
+            this.db.recordGroupCreation(user.id, this.environment, groupApiId, groupConfig.name);
+          }
           this.db.logOperation('create_group', user.id, this.environment, 'success');
           console.log(`✅ Group created (ID: ${groupApiId})`);
         } else {
@@ -127,11 +133,15 @@ export class SetupWorkflow {
           
           // Replace <group_id> placeholder
           const sourcePayload = JSON.parse(
-            JSON.stringify(groupConfig.source).replace(/<group_id>/g, groupApiId)
+            JSON.stringify(groupConfig.source).replace(/<group_id>/g, groupApiId || '')
           );
           
-          const sourceResponse = await this.integrationsAPI.createSource(userToken, sourcePayload);
-          const sourceId = sourceResponse.data.id || sourceResponse.data.source_id || 'unknown';
+          const sourceResponse = await this.mcpClient.makeApiCall(
+            `${Config.getApiUrl('integrations', this.environment)}/api/v1/sources/generic`,
+            'POST',
+            sourcePayload
+          );
+          const sourceId = sourceResponse.id || sourceResponse.source_id || 'unknown';
           
           this.db.recordSourceCreation(user.id, this.environment, sourceId, groupConfig.source.name);
           this.db.logOperation('create_source', user.id, this.environment, 'success');

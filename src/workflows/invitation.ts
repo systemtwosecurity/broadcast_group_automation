@@ -66,20 +66,24 @@ export class InvitationWorkflow {
     console.log("=== Admin Login ===");
     const { Config } = await import('../config/config.js');
     const appUrl = Config.getApiUrl('app', this.environment);
-    const adminToken = await this.mcpClient.login(
+    await this.mcpClient.login(
       `${appUrl}/login`,
       usersConfig.admin.email,
       usersConfig.admin.password!
     );
 
-    // Send invitations
+    // Send invitations using the authenticated browser session
     console.log("\n=== Sending Invitations ===");
     const needsInviteEmails = needsInvite.map(u => u.email);
-    const result = await this.detectionsAPI.sendInvitations(adminToken, needsInviteEmails);
+    const result = await this.mcpClient.makeApiCall(
+      `${Config.getApiUrl('detections', this.environment)}/api/v1/users/invitations`,
+      'POST',
+      { emails: needsInviteEmails }
+    );
 
     // Parse API response
-    const invited = result.data?.invitations || [];
-    const existed = needsInviteEmails.filter(email => !invited.includes(email));
+    const invited = result.invitations || result.data?.invitations || [];
+    const existed = needsInviteEmails.filter((email: string) => !invited.includes(email));
 
     // Record in database
     for (const email of invited) {
@@ -102,12 +106,12 @@ export class InvitationWorkflow {
     console.log("\n📊 Results:");
     if (invited.length > 0) {
       console.log(`   ✅ Sent: ${invited.length}`);
-      invited.forEach(email => console.log(`      - ${email}`));
+      invited.forEach((email: string) => console.log(`      - ${email}`));
     }
     
     if (existed.length > 0) {
       console.log(`   ⏭️  Already existed: ${existed.length}`);
-      existed.forEach(email => console.log(`      - ${email}`));
+      existed.forEach((email: string) => console.log(`      - ${email}`));
     }
 
     if (alreadyInvited.length > 0) {
