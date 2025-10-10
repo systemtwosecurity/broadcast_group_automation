@@ -113,19 +113,37 @@ export class SetupWorkflow {
         // Create group (if not exists)
         let groupApiId = this.db.getGroupApiId(user.id, this.environment);
         
-        if (!groupApiId) {
-          console.log(`🏗️  Creating group: ${groupConfig.name}...`);
-          const groupResponse = await axios.post(
-            `${Config.getApiUrl('detections', this.environment)}/api/v1/groups`,
-            groupConfig.group,
-            {
-              headers: {
-                'Authorization': `Bearer ${userToken}`,
-                'Content-Type': 'application/json'
+          if (!groupApiId) {
+            console.log(`🏗️  Creating group: ${groupConfig.name}...`);
+            try {
+              const groupResponse = await axios.post(
+                `${Config.getApiUrl('detections', this.environment)}/api/v1/groups`,
+                groupConfig.group,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${userToken}`,
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+              // API returns { data: { id: "..." } }
+              groupApiId = groupResponse.data.data?.id || groupResponse.data.id;
+            } catch (error: any) {
+              if (error.response?.status === 400 && error.response?.data?.code === 'DUPLICATE_GROUP_NAME') {
+                console.log(`   ℹ️  Group "${groupConfig.name}" already exists (created outside automation)`);
+                console.log(`   ⚠️  Skipping group creation, but sources won't be created without group ID`);
+                console.log(`   💡 To fix: Manually get the group ID and add it to the database`);
+                // Skip this user since we don't have the group ID
+                results.skipped.push(user.id);
+                continue;
               }
+              
+              if (error.response) {
+                console.error(`   ❌ API Error: ${error.response.status} ${error.response.statusText}`);
+                console.error(`   📦 Response:`, JSON.stringify(error.response.data, null, 2));
+              }
+              throw error;
             }
-          );
-          groupApiId = groupResponse.data.id;
           
           if (groupApiId) {
             this.db.recordGroupCreation(user.id, this.environment, groupApiId, groupConfig.name);
@@ -155,7 +173,8 @@ export class SetupWorkflow {
               }
             }
           );
-          const sourceId = sourceResponse.data.id || sourceResponse.data.source_id || 'unknown';
+          // API might return { data: { id: "..." } } or { id: "..." }
+          const sourceId = sourceResponse.data.data?.id || sourceResponse.data.id || sourceResponse.data.source_id || 'unknown';
           
           this.db.recordSourceCreation(user.id, this.environment, sourceId, groupConfig.source.name);
           this.db.logOperation('create_source', user.id, this.environment, 'success');
