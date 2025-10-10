@@ -77,6 +77,7 @@ export interface UserStatus {
   groupCreated: boolean;
   sourceCreated: boolean;
   groupApiId: string | null;
+  sourceApiId: string | null;
 }
 
 export interface AllStatus {

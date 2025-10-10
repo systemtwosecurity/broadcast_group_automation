@@ -179,6 +179,125 @@ program
   });
 
 // ============================================
+// cleanup - Delete groups and sources
+// ============================================
+program
+  .command("cleanup")
+  .description("Delete groups and sources from API and database")
+  .option("-e, --env <environment>", "Environment (dev, qa, prod)", "dev")
+  .option("-g, --groups <groups>", "Comma-separated group IDs or 'all'", "all")
+  .option("--confirm", "Confirm deletion (required)")
+  .action(async (options) => {
+    if (!options.confirm) {
+      console.error("\n⚠️  Please add --confirm flag to delete groups and sources\n");
+      process.exit(1);
+    }
+    
+    const environment = options.env as Environment;
+    const groupIds = options.groups === "all" ? null : options.groups.split(",").map((s: string) => s.trim());
+    
+    mkdirSync('./data', { recursive: true });
+    
+    const db = new StateDatabase();
+    const configLoader = new ConfigLoader();
+    
+    try {
+      const usersConfig = configLoader.loadUsers();
+      const allUsers = usersConfig.users;
+      
+      // Filter users based on groupIds
+      let selectedUsers = allUsers;
+      if (groupIds && groupIds.length > 0) {
+        selectedUsers = allUsers.filter(u => groupIds.includes(u.id));
+        
+        if (selectedUsers.length === 0) {
+          console.error(`❌ No users found for group IDs: ${groupIds.join(", ")}\n`);
+          return;
+        }
+      }
+      
+      console.log(`\n🗑️  Deleting groups and sources for ${environment} environment\n`);
+      
+      const axios = (await import('axios')).default;
+      const { Config } = await import('../config/config.js');
+      
+      for (const user of selectedUsers) {
+        console.log(`─────────────────────────────────────`);
+        console.log(`🗑️  Processing: ${user.id}`);
+        console.log(`─────────────────────────────────────`);
+        
+        const userToken = Config.getUserToken(user.id);
+        if (!userToken) {
+          console.log(`⚠️  No token for ${user.id}, skipping...\n`);
+          continue;
+        }
+        
+        const status = db.getUserStatus(user.id, environment);
+        
+        // Delete source first (if exists)
+        if (status.sourceCreated && status.sourceApiId) {
+          try {
+            console.log(`🗑️  Deleting source: ${status.sourceApiId}...`);
+            await axios.delete(
+              `${Config.getApiUrl('integrations', environment)}/api/v1/sources/${status.sourceApiId}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${userToken}`,
+                  'Accept': '*/*'
+                }
+              }
+            );
+            console.log(`✅ Source deleted`);
+          } catch (error: any) {
+            if (error.response?.status === 404) {
+              console.log(`ℹ️  Source not found (already deleted)`);
+            } else {
+              console.error(`❌ Failed to delete source: ${error.message}`);
+            }
+          }
+        }
+        
+        // Delete group (if exists)
+        if (status.groupCreated && status.groupApiId) {
+          try {
+            console.log(`🗑️  Deleting group: ${status.groupApiId}...`);
+            await axios.delete(
+              `${Config.getApiUrl('detections', environment)}/api/v1/groups/${status.groupApiId}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${userToken}`,
+                  'Accept': 'application/json, text/plain, */*'
+                }
+              }
+            );
+            console.log(`✅ Group deleted`);
+          } catch (error: any) {
+            if (error.response?.status === 404) {
+              console.log(`ℹ️  Group not found (already deleted)`);
+            } else {
+              console.error(`❌ Failed to delete group: ${error.message}`);
+            }
+          }
+        }
+        
+        // Remove from database
+        db.resetUser(user.id, environment);
+        console.log(`✅ Removed from database\n`);
+      }
+      
+      console.log("═══════════════════════════════════════");
+      console.log("✅ Cleanup complete!");
+      console.log("═══════════════════════════════════════\n");
+      
+    } catch (error: any) {
+      console.error(`\n❌ Error: ${error.message}\n`);
+      process.exit(1);
+    } finally {
+      db.close();
+    }
+  });
+
+// ============================================
 // list-groups - Show all groups
 // ============================================
 program

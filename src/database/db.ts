@@ -132,12 +132,22 @@ export class StateDatabase {
   // Status Queries
   // ============================================
 
+  getSourceApiId(userId: string, environment: Environment): string | null {
+    const result = this.db.prepare(`
+      SELECT source_api_id FROM sources 
+      WHERE user_id = ? AND environment = ?
+    `).get(userId, environment) as { source_api_id: string | null } | undefined;
+    
+    return result?.source_api_id || null;
+  }
+
   getUserStatus(userId: string, environment: Environment): UserStatus {
     return {
       invited: this.isUserInvited(userId, environment),
       groupCreated: this.isGroupCreated(userId, environment),
       sourceCreated: this.isSourceCreated(userId, environment),
-      groupApiId: this.getGroupApiId(userId, environment)
+      groupApiId: this.getGroupApiId(userId, environment),
+      sourceApiId: this.getSourceApiId(userId, environment)
     };
   }
 

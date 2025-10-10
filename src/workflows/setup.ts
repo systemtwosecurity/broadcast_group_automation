@@ -163,7 +163,9 @@ export class SetupWorkflow {
                       groupApiId = existingGroup.id;
                       console.log(`   ✅ Found existing group ID: ${groupApiId}`);
                       // Save to database for future use
-                      this.db.recordGroupCreation(user.id, this.environment, groupApiId, groupConfig.name);
+                      if (groupApiId) {
+                        this.db.recordGroupCreation(user.id, this.environment, groupApiId, groupConfig.name);
+                      }
                     } else {
                       console.log(`   ⚠️  Could not find group in API response`);
                       groupApiId = '';

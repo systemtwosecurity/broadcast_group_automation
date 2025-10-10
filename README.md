@@ -28,6 +28,9 @@ npm run dev -- setup --env dev
 
 # 7. Check status
 npm run dev -- status --env dev
+
+# 8. (Optional) Delete groups and sources
+npm run dev -- cleanup --env dev --confirm
 ```
 
 > **Note:** Tokens expire after 1 hour. Just get a fresh token from DevTools when needed.
@@ -50,10 +53,31 @@ For detailed setup instructions, see **[SETUP.md](./SETUP.md)**.
 
 - ✅ **Smart State Tracking** - SQLite database remembers everything
 - ✅ **Two-Phase Workflow** - Invitations → Manual Verification → Setup
-- ✅ **MCP Playwright** - Automated login and token retrieval
-- ✅ **Incremental Setup** - Process users as they verify
-- ✅ **CLI + Optional UI** - Command-line or web interface
-- ✅ **Multi-Environment** - dev, qa, prod support
+- ✅ **Cleanup Command** - Delete groups and sources from API and database
+
+## 📋 CLI Commands
+
+```bash
+# Send invitations to users
+npm run dev -- invite --env dev [--groups sigmahq,yara_100days]
+
+# Create groups and sources
+npm run dev -- setup --env dev [--groups sigmahq,yara_100days]
+
+# Check current status
+npm run dev -- status --env dev
+
+# Delete groups and sources (requires --confirm)
+npm run dev -- cleanup --env dev --confirm [--groups sigmahq,yara_100days]
+
+# Reset database state (does NOT delete from API)
+npm run dev -- reset --env dev --confirm [--groups sigmahq,yara_100days]
+
+# List all configured groups
+npm run dev -- list-groups
+```
+
+> **Tip:** Use `--groups` to target specific groups, or omit it to process all groups.
 
 ## 📋 Commands
 
