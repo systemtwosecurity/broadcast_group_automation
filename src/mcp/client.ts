@@ -475,26 +475,115 @@ export class MCPClient {
         return tokenData.access_token;
       }
       
-      // Priority 3: Extract from httpOnly cookies via CDP
+      // Priority 3: Extract refresh_token from httpOnly cookies via CDP
       console.log(`⚠️  No tokens in storage - attempting to extract from httpOnly cookies...`);
       
       try {
-        // Try to get cookies via document.cookie (won't include httpOnly)
-        // But we can make an API call from the browser which will auto-include auth cookies
-        const testApiUrl = `${loginUrl.replace('/login', '')}/api/v1/users/me`;
-        console.log(`   🔍 Testing authentication with: ${testApiUrl}`);
+        // Use browser_evaluate to access cookies via CDP-like functionality
+        console.log(`   🔍 Searching httpOnly cookies for refresh_token...`);
+        const cookieExtract = await this.client.callTool({
+          name: 'browser_evaluate',
+          arguments: {
+            function: `async () => {
+              // Try to get all cookies including httpOnly via CDP if available
+              // Note: document.cookie only shows non-httpOnly cookies
+              const result = {
+                documentCookies: [],
+                cookieNames: [],
+                refreshToken: null,
+                accessToken: null
+              };
+              
+              // Get regular cookies from document.cookie
+              const cookies = document.cookie.split(';');
+              for (const cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name) {
+                  result.cookieNames.push(name);
+                  result.documentCookies.push({ name, value: value ? value.substring(0, 50) : '' });
+                  
+                  // Look for token-like values
+                  if ((name.includes('refresh') || name.includes('rt')) && value && value.length > 20) {
+                    result.refreshToken = value;
+                  }
+                  if ((name.includes('access') || name.includes('at') || name.includes('token')) && value && value.length > 20 && value.startsWith('eyJ')) {
+                    result.accessToken = value;
+                  }
+                }
+              }
+              
+              return JSON.stringify(result);
+            }`,
+          },
+        });
         
-        const userInfo = await this.makeApiCall(testApiUrl, 'GET');
-        console.log(`✅ Authenticated via httpOnly cookies as: ${userInfo.email || email}`);
+        const cookieContent = cookieExtract.content as Array<{ text?: string }> | undefined;
+        let cookiesRaw = cookieContent?.[0]?.text || '{}';
         
-        // Since auth works via cookies, use password grant as fallback to get extractable token
-        console.log(`   🔄 Getting extractable token via password grant...`);
+        // Parse MCP response
+        if (cookiesRaw.includes('### Result')) {
+          const lines = cookiesRaw.split('\n');
+          const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
+          if (resultIndex !== -1 && lines[resultIndex + 1]) {
+            cookiesRaw = lines[resultIndex + 1].trim();
+          }
+        }
+        
+        // Remove surrounding quotes and unescape
+        cookiesRaw = cookiesRaw.replace(/^["']|["']$/g, '');
+        cookiesRaw = cookiesRaw.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        
+        const cookieData = JSON.parse(cookiesRaw);
+        
+        console.log(`📦 Found ${cookieData.cookieNames.length} cookies: ${cookieData.cookieNames.join(', ')}`);
+        
+        // Priority 3a: Use refresh_token from cookies if found
+        if (cookieData.refreshToken) {
+          console.log(`✅ Found refresh_token in cookies: ${cookieData.refreshToken.substring(0, 30)}...`);
+          console.log(`🔄 Exchanging cookie refresh_token for access_token...`);
+          
+          const tokenResponse = await this.refreshAccessToken(
+            auth0Domain,
+            clientId,
+            clientSecret,
+            cookieData.refreshToken
+          );
+          console.log(`✅ Got fresh access_token from cookie refresh_token (expires in ${tokenResponse.expires_in}s)`);
+          return tokenResponse.access_token;
+        }
+        
+        // Priority 3b: Use access_token from cookies if found
+        if (cookieData.accessToken) {
+          console.log(`✅ Found access_token in cookies: ${cookieData.accessToken.substring(0, 30)}...`);
+          return cookieData.accessToken;
+        }
+        
+        console.log(`⚠️  No tokens in accessible cookies - tokens must be in httpOnly cookies`);
+        console.log(`   💡 Attempting password grant flow as final fallback...`);
+        
+        // Priority 3c: Use password grant flow as last resort
         const passwordToken = await this.getPasswordGrantToken(auth0Domain, clientId, clientSecret, email, password);
         console.log(`✅ Got password grant access_token: ${passwordToken.substring(0, 30)}...`);
         return passwordToken;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        throw new Error(`Token extraction failed. Tokens are in httpOnly cookies and password grant is not enabled in Auth0. Please enable 'Password' grant type in Auth0 Dashboard > Applications > ${clientId} > Advanced Settings > Grant Types. Error: ${errorMsg}`);
+        
+        // Provide helpful error message
+        if (errorMsg.includes('unauthorized_client') || errorMsg.includes('Grant type')) {
+          throw new Error(
+            `❌ Token extraction failed:\n` +
+            `   • Tokens are in httpOnly cookies (secure, but inaccessible to JavaScript)\n` +
+            `   • Password Grant is not enabled in Auth0\n\n` +
+            `📋 To fix, enable Password Grant in Auth0:\n` +
+            `   1. Go to Auth0 Dashboard → Applications → Your App\n` +
+            `   2. Advanced Settings → Grant Types → Check "Password"\n` +
+            `   3. Save Changes\n\n` +
+            `📚 See AUTH0_PASSWORD_GRANT_SETUP.md for details.\n\n` +
+            `Original error: ${errorMsg}`
+          );
+        }
+        
+        throw new Error(`Token extraction failed: ${errorMsg}`);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
