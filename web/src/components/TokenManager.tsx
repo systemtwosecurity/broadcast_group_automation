@@ -62,10 +62,11 @@ export function TokenManager(_props: TokenManagerProps) {
   };
 
   const addNewToken = () => {
-    if (!newToken.id || !newToken.email || !newToken.token) {
-      showMessage('error', 'All fields are required');
+    if (!newToken.id || !newToken.email) {
+      showMessage('error', 'Group ID and email are required');
       return;
     }
+    // If token is empty, it will be set to "SKIP" by the backend
     saveToken(newToken);
     setNewToken({ id: '', email: '', token: '' });
   };
@@ -76,12 +77,24 @@ export function TokenManager(_props: TokenManagerProps) {
   };
 
   const maskToken = (token: string) => {
+    if (token === 'SKIP') return 'SKIP';
     if (token.length <= 20) return '•'.repeat(token.length);
     return token.substring(0, 10) + '...' + token.substring(token.length - 10);
   };
 
+  const isSkipToken = (token: string) => {
+    return token === 'SKIP' || !token || token.trim() === '';
+  };
+
   return (
     <div className="space-y-6">
+      {/* Info Banner */}
+      <div className="p-4 bg-blue-500/10 dark:bg-blue-900/20 border border-blue-500/30 dark:border-blue-700 rounded-lg">
+        <p className="text-sm text-blue-200 dark:text-blue-300">
+          💡 <strong>Tip:</strong> Leave the token field empty to set it as "SKIP". Users with SKIP tokens will be skipped during setup operations.
+        </p>
+      </div>
+
       {message && (
         <div
           className={`p-4 rounded-lg ${
@@ -150,7 +163,7 @@ export function TokenManager(_props: TokenManagerProps) {
               type="password"
               value={newToken.token}
               onChange={(e) => setNewToken({ ...newToken, token: e.target.value })}
-              placeholder="Bearer token"
+              placeholder="Bearer token (leave empty to skip)"
               className="col-span-4 px-3 py-2 bg-white/10 dark:bg-gray-900/70 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
@@ -164,32 +177,49 @@ export function TokenManager(_props: TokenManagerProps) {
 
         {/* Existing Tokens */}
         <div className="space-y-2 max-h-96 overflow-y-auto">
-          {tokens.map((token) => (
-            <div
-              key={token.id}
-              className="flex items-center gap-2 p-3 bg-white/5 dark:bg-gray-900/50 rounded-lg border border-white/10 dark:border-gray-700 hover:bg-white/10 dark:hover:bg-gray-900/70 transition-colors"
-            >
-              <div className="flex-1 grid grid-cols-12 gap-2 items-center">
-                <div className="col-span-2 text-white dark:text-gray-100 font-mono text-sm">{token.id}</div>
-                <div className="col-span-4 text-white/70 dark:text-gray-300 text-sm truncate">{token.email}</div>
-                <div className="col-span-6 text-white/50 dark:text-gray-400 font-mono text-xs">
-                  {showTokens[token.id] ? token.token : maskToken(token.token)}
+          {tokens.map((token) => {
+            const isSkip = isSkipToken(token.token);
+            return (
+              <div
+                key={token.id}
+                className={`flex items-center gap-2 p-3 rounded-lg border transition-colors ${
+                  isSkip
+                    ? 'bg-gray-500/10 dark:bg-gray-800/30 border-gray-500/20 dark:border-gray-600'
+                    : 'bg-white/5 dark:bg-gray-900/50 border-white/10 dark:border-gray-700 hover:bg-white/10 dark:hover:bg-gray-900/70'
+                }`}
+              >
+                <div className="flex-1 grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-2 text-white dark:text-gray-100 font-mono text-sm">{token.id}</div>
+                  <div className="col-span-4 text-white/70 dark:text-gray-300 text-sm truncate">{token.email}</div>
+                  <div className="col-span-6 flex items-center gap-2">
+                    {isSkip ? (
+                      <span className="px-2 py-1 bg-gray-500/20 dark:bg-gray-700/30 border border-gray-500/30 dark:border-gray-600 rounded text-gray-400 dark:text-gray-500 text-xs font-medium">
+                        NOT SET (SKIP)
+                      </span>
+                    ) : (
+                      <span className="text-white/50 dark:text-gray-400 font-mono text-xs">
+                        {showTokens[token.id] ? token.token : maskToken(token.token)}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                {!isSkip && (
+                  <button
+                    onClick={() => toggleShowToken(token.id)}
+                    className="px-2 py-1 bg-white/10 dark:bg-gray-700 hover:bg-white/20 dark:hover:bg-gray-600 rounded text-white/70 dark:text-gray-300 transition-colors"
+                  >
+                    {showTokens[token.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                )}
+                <button
+                  onClick={() => deleteToken(token.id)}
+                  className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-red-400 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-              <button
-                onClick={() => toggleShowToken(token.id)}
-                className="px-2 py-1 bg-white/10 dark:bg-gray-700 hover:bg-white/20 dark:hover:bg-gray-600 rounded text-white/70 dark:text-gray-300 transition-colors"
-              >
-                {showTokens[token.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={() => deleteToken(token.id)}
-                className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-red-400 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

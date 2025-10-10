@@ -45,15 +45,18 @@ router.post('/tokens', (req: Request, res: Response) => {
   try {
     const { id, email, token } = req.body;
     
-    if (!id || !token) {
-      return res.status(400).json({ error: 'ID and token are required' });
+    if (!id) {
+      return res.status(400).json({ error: 'ID is required' });
     }
+    
+    // If token is empty or not provided, use "SKIP"
+    const tokenValue = token && token.trim() !== '' ? token.trim() : 'SKIP';
     
     const envPath = join(process.cwd(), '.env');
     let envContent = readFileSync(envPath, 'utf-8');
     
     const envKey = id === 'admin' ? 'ADMIN_TOKEN' : `USER_TOKEN_${id.toUpperCase()}`;
-    const envLine = `${envKey}=${token}`;
+    const envLine = `${envKey}=${tokenValue}`;
     
     // Check if key exists
     const regex = new RegExp(`^${envKey}=.+$`, 'm');
