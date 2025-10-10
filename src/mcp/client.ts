@@ -91,14 +91,14 @@ export class MCPClient {
 
       // Execute JavaScript to get token from storage
       const tokenResult = await this.client.callTool({
-        name: 'browser_console',
+        name: 'browser_evaluate',
         arguments: {
-          script: `
-            localStorage.getItem('access_token') || 
-            localStorage.getItem('token') ||
-            sessionStorage.getItem('access_token') ||
-            sessionStorage.getItem('token')
-          `,
+          function: `() => {
+            return localStorage.getItem('access_token') || 
+                   localStorage.getItem('token') ||
+                   sessionStorage.getItem('access_token') ||
+                   sessionStorage.getItem('token');
+          }`,
         },
       });
 
