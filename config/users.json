@@ -1,0 +1,31 @@
+{
+  "admin": {
+    "email": "admin@company.com"
+  },
+  "users": [
+    {
+      "id": "sigmahq",
+      "email": "groups+sigmahq_dev@detections.ai"
+    },
+    {
+      "id": "yara_100days",
+      "email": "groups+100days_yara_2025_dev@detections.ai"
+    },
+    {
+      "id": "googlesecops",
+      "email": "groups+googlesecops_dev@detections.ai"
+    },
+    {
+      "id": "azure_sentinel",
+      "email": "groups+azure_sentinel_dev@detections.ai"
+    },
+    {
+      "id": "reversinglabs_yara",
+      "email": "groups+reversinglabs_yara_dev@detections.ai"
+    },
+    {
+      "id": "splunksecurity",
+      "email": "groups+splunksecurity_dev@detections.ai"
+    }
+  ]
+}

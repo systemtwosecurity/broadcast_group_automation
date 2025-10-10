@@ -1,0 +1,149 @@
+{
+  "groups": [
+    {
+      "id": "sigmahq",
+      "name": "SigmaHQ Private",
+      "description": "SigmaHQ Private",
+      "email_prefix": "sigmahq",
+      "token_env_var": "SIGMAHQ_BEARER_TOKEN",
+      "type": "private",
+      "unlisted": true,
+      "source": {
+        "integration_type": "github",
+        "name": "SigmaHQ Public Rules",
+        "description": "Community sigma rules from GitHub",
+        "github_url": "https://github.com/SigmaHQ/sigma/tree/master/rules",
+        "branch": "master",
+        "auto_sync": true,
+        "public": true
+      }
+    },
+    {
+      "id": "yara_100days",
+      "name": "100 Days of YARA 2025",
+      "description": "100 Days of YARA 2025",
+      "email_prefix": "100days_yara_2025",
+      "token_env_var": "YARA_100DAYS_BEARER_TOKEN",
+      "type": "private",
+      "unlisted": true,
+      "source": {
+        "integration_type": "github",
+        "name": "100 Days of Yara Public Rules",
+        "description": "Community Yara Rules from GitHub",
+        "github_url": "https://github.com/100DaysofYARA/2025",
+        "branch": "main",
+        "auto_sync": true,
+        "public": true
+      }
+    },
+    {
+      "id": "google_secops",
+      "name": "Google SecOps",
+      "description": "Google SecOps Private",
+      "email_prefix": "googlesecops",
+      "token_env_var": "GOOGLE_SECOPS_BEARER_TOKEN",
+      "type": "private",
+      "unlisted": true,
+      "source": {
+        "integration_type": "github",
+        "name": "Google SecOps Public Rules",
+        "description": "Google SecOps Public Rules from GitHub",
+        "github_url": "https://github.com/chronicle/detection-rules/tree/main/rules/community",
+        "branch": "main",
+        "pipeline_id": "github-detections",
+        "pipeline_config": {
+          "include_patterns": ["**/*.yaral"],
+          "exclude_patterns": ["**/test/**"],
+          "run_validation": true,
+          "run_static_parsing": true,
+          "run_ai_enrichment": true,
+          "run_job_status": true
+        },
+        "auto_sync": true,
+        "public": true
+      }
+    },
+    {
+      "id": "azure_sentinel",
+      "name": "Azure Sentinel Private",
+      "description": "Azure Sentinel",
+      "email_prefix": "azure_sentinel",
+      "token_env_var": "AZURE_SENTINEL_BEARER_TOKEN",
+      "type": "private",
+      "unlisted": true,
+      "source": {
+        "integration_type": "github",
+        "name": "Azure Sentinel Detections",
+        "description": "Detections folder from Azure/Azure-Sentinel",
+        "github_url": "https://github.com/Azure/Azure-Sentinel/tree/master/Detections",
+        "branch": "master",
+        "pipeline_id": "github-detections",
+        "pipeline_config": {
+          "include_patterns": ["**/*.yaml", "**/*.yml"],
+          "exclude_patterns": ["**/test/**"],
+          "run_validation": true,
+          "run_static_parsing": true,
+          "run_ai_enrichment": true,
+          "run_job_status": true
+        },
+        "auto_sync": true,
+        "public": true
+      }
+    },
+    {
+      "id": "reversinglabs",
+      "name": "ReversingLabs Yara Private",
+      "description": "ReversingLabs Yara Private",
+      "email_prefix": "reversinglabs_yara",
+      "token_env_var": "REVERSINGLABS_BEARER_TOKEN",
+      "type": "private",
+      "unlisted": true,
+      "source": {
+        "integration_type": "github",
+        "name": "ReversingLabs YARA Rules",
+        "description": "Public YARA signatures maintained by ReversingLabs",
+        "github_url": "https://github.com/reversinglabs/reversinglabs-yara-rules/tree/develop",
+        "branch": "develop",
+        "pipeline_id": "github-detections",
+        "pipeline_config": {
+          "include_patterns": ["**/*.yar", "**/*.yara"],
+          "exclude_patterns": ["**/test/**"],
+          "run_validation": true,
+          "run_static_parsing": true,
+          "run_ai_enrichment": true,
+          "run_job_status": true
+        },
+        "auto_sync": true,
+        "public": true
+      }
+    },
+    {
+      "id": "splunk",
+      "name": "Splunk Security Content Private",
+      "description": "Splunk Security Content Private",
+      "email_prefix": "splunksecurity",
+      "token_env_var": "SPLUNK_BEARER_TOKEN",
+      "type": "private",
+      "unlisted": true,
+      "source": {
+        "integration_type": "github",
+        "name": "Splunk Security Content",
+        "description": "Detections from the Splunk security_content repository",
+        "github_url": "https://github.com/splunk/security_content/tree/develop/detections",
+        "branch": "develop",
+        "pipeline_id": "github-detections",
+        "pipeline_config": {
+          "include_patterns": ["**/*.yml", "**/*.yaml"],
+          "exclude_patterns": ["**/test/**"],
+          "run_validation": true,
+          "run_static_parsing": true,
+          "run_ai_enrichment": true,
+          "run_job_status": true
+        },
+        "auto_sync": true,
+        "public": true
+      }
+    }
+  ]
+}
+

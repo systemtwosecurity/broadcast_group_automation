@@ -1,0 +1,14 @@
+node_modules
+dist
+data
+logs
+*.log
+.git
+.gitignore
+.idea
+.vscode
+*.md
+!README.md
+config/.env*
+config/users.json
+
