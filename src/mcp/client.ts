@@ -372,11 +372,24 @@ export class MCPClient {
       console.log(`✅ Successfully logged in as ${email}`);
       
       // Wait for the app to process Auth0 callback and store tokens
-      console.log(`⏳ Waiting for app to process authentication...`);
+      console.log(`⏳ Waiting for app to process authentication and initialize...`);
       await this.client.callTool({
         name: 'browser_wait_for',
-        arguments: { time: 3 },
+        arguments: { time: 8 }, // Even longer wait for app to fully initialize
       });
+      
+      // Check for console errors that might indicate auth issues
+      const consoleCheck = await this.client.callTool({
+        name: 'browser_console_messages',
+        arguments: {}
+      });
+      const consoleContent = consoleCheck.content as Array<{ text?: string }> | undefined;
+      const consoleText = consoleContent?.[0]?.text || '';
+      if (consoleText.toLowerCase().includes('error') || consoleText.toLowerCase().includes('fail')) {
+        console.log(`   ⚠️  Console errors detected (might be normal):`)
+        const lines = consoleText.split('\n').filter(l => l.toLowerCase().includes('error') || l.toLowerCase().includes('fail'));
+        lines.slice(0, 3).forEach(line => console.log(`      ${line.substring(0, 100)}`));
+      }
       
       // Extract tokens from localStorage (app should have stored them by now)
       console.log(`🔍 Looking for access_token and refresh_token in storage...`);
@@ -490,10 +503,12 @@ export class MCPClient {
               const result = {
                 foundToken: null,
                 tokenSource: null,
-                interceptedRequests: []
+                interceptedRequests: [],
+                globalKeysChecked: [],
+                debugInfo: []
               };
               
-              // Method 1: Intercept fetch API
+              // Method 1a: Intercept fetch API
               const originalFetch = window.fetch;
               let capturedToken = null;
               
@@ -505,48 +520,115 @@ export class MCPClient {
                   const headers = options.headers;
                   if (headers.Authorization || headers.authorization) {
                     capturedToken = headers.Authorization || headers.authorization;
+                    result.debugInfo.push('Captured token from fetch API');
                   }
                 }
                 
                 return originalFetch.apply(this, args);
               };
               
-              // Method 2: Try to make an API call that the app would normally make
-              // This should include any auth headers the app uses
-              try {
-                const apiUrl = window.location.origin + '/api/v1/detections';
-                console.log('Attempting API call to:', apiUrl);
-                
-                const response = await originalFetch(apiUrl, {
-                  method: 'GET',
-                  credentials: 'include'
-                });
-                
-                result.interceptedRequests.push({
-                  url: apiUrl,
-                  status: response.status,
-                  ok: response.ok
-                });
-              } catch (e) {
-                result.interceptedRequests.push({
-                  error: e.message
-                });
+              // Method 1b: Intercept XMLHttpRequest (for axios/jQuery)
+              const originalOpen = XMLHttpRequest.prototype.open;
+              const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+              
+              XMLHttpRequest.prototype.setRequestHeader = function(header, value) {
+                if (header.toLowerCase() === 'authorization' && value && value.includes('Bearer')) {
+                  capturedToken = value;
+                  result.debugInfo.push('Captured token from XMLHttpRequest');
+                }
+                return originalSetRequestHeader.apply(this, arguments);
+              };
+              
+              // Method 2: Trigger actual API calls that the app makes (with Authorization headers)
+              const apiCallsToTry = [
+                'https://detections-backend.dev.s2s.ai/api/v1/users/me',
+                window.location.origin.replace('detections.', 'detections-backend.') + '/api/v1/users/me',
+                window.location.origin + '/api/v1/users/me'
+              ];
+              
+              for (const apiUrl of apiCallsToTry) {
+                try {
+                  console.log('Attempting API call to:', apiUrl);
+                  
+                  const response = await originalFetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                      'Accept': 'application/json',
+                      'Origin': window.location.origin,
+                      'Referer': window.location.href
+                    },
+                    credentials: 'include'
+                  });
+                  
+                  result.interceptedRequests.push({
+                    url: apiUrl,
+                    status: response.status,
+                    ok: response.ok
+                  });
+                  
+                  // If this call succeeded, the token was captured
+                  if (capturedToken) {
+                    break;
+                  }
+                } catch (e) {
+                  result.interceptedRequests.push({
+                    url: apiUrl,
+                    error: e.message
+                  });
+                }
               }
               
-              // Method 3: Check if app stores token in window object or global scope
+              // Method 3: Check if app stores token in window object, React state, or global scope
               const globalKeys = Object.keys(window).filter(k => 
                 k.toLowerCase().includes('token') || 
                 k.toLowerCase().includes('auth') ||
-                k.toLowerCase().includes('session')
+                k.toLowerCase().includes('session') ||
+                k.startsWith('__NEXT') || // Next.js state
+                k.startsWith('__REACT') || // React state
+                k.includes('redux') || // Redux store
+                k.includes('store')
               );
+              
+              result.globalKeysChecked = globalKeys;
+              result.debugInfo.push('Found ' + globalKeys.length + ' potential global keys');
               
               for (const key of globalKeys) {
                 try {
                   const value = window[key];
+                  
+                  // Direct string token
                   if (typeof value === 'string' && value.length > 50 && value.startsWith('eyJ')) {
                     result.foundToken = value;
                     result.tokenSource = 'window.' + key;
                     break;
+                  }
+                  
+                  // Check if it's an object with nested tokens
+                  if (typeof value === 'object' && value !== null) {
+                    const searchObject = (obj, path = '', depth = 0) => {
+                      if (depth > 5) return false; // Limit recursion depth
+                      
+                      try {
+                        for (const [k, v] of Object.entries(obj)) {
+                          if (typeof v === 'string' && v.length > 50 && v.startsWith('eyJ')) {
+                            result.foundToken = v;
+                            result.tokenSource = 'window.' + key + path + '.' + k;
+                            return true;
+                          } else if (typeof v === 'object' && v !== null && depth < 5) {
+                            if (searchObject(v, path + '.' + k, depth + 1)) {
+                              return true;
+                            }
+                          }
+                        }
+                      } catch (e) {
+                        // Skip circular references or inaccessible properties
+                      }
+                      return false;
+                    };
+                    
+                    if (searchObject(value)) {
+                      break;
+                    }
                   }
                 } catch (e) {
                   // Skip inaccessible properties
@@ -609,8 +691,9 @@ export class MCPClient {
                 if (result.foundToken) break;
               }
               
-              // Restore original fetch
+              // Restore original functions
               window.fetch = originalFetch;
+              XMLHttpRequest.prototype.setRequestHeader = originalSetRequestHeader;
               
               return JSON.stringify(result);
             }`,
@@ -636,6 +719,13 @@ export class MCPClient {
         const tokenData = JSON.parse(cookiesRaw);
         
         console.log(`📦 Intercepted requests: ${tokenData.interceptedRequests.length}`);
+        console.log(`📦 Global keys checked: ${tokenData.globalKeysChecked.length}`);
+        if (tokenData.globalKeysChecked.length > 0) {
+          console.log(`   Keys: ${tokenData.globalKeysChecked.slice(0, 10).join(', ')}${tokenData.globalKeysChecked.length > 10 ? '...' : ''}`);
+        }
+        if (tokenData.debugInfo.length > 0) {
+          tokenData.debugInfo.forEach((info: string) => console.log(`   ℹ️  ${info}`));
+        }
         
         // Priority 3a: Use token from any source if found!
         if (tokenData.foundToken) {
