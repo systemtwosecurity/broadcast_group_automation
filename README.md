@@ -5,37 +5,37 @@ Automate security content group and source creation across multiple platforms wi
 ## 🚀 Quick Start
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Configure environment variables (credentials)
+# 2. Install Chromium for browser automation (one-time, ~280MB)
+npx playwright install chromium
+
+# 3. Configure environment variables (credentials)
 cp .env.example .env
 vim .env  # Add your admin password and user passwords
 
-# Users and groups config are in config/ directory (safe to commit)
-# config/users.json - user emails only
-# config/groups.json - group configurations
-
-# Send invitations
+# 4. Send invitations
 npm run dev -- invite --env dev
 
-# (Wait for users to verify emails, then update passwords in .env)
+# 5. (Wait for users to verify emails, then update passwords in .env)
 
-# Create groups and sources
+# 6. Create groups and sources
 npm run dev -- setup --env dev
 
-# Check status
+# 7. Check status
 npm run dev -- status --env dev
-
-# (First run will download MCP Playwright server automatically)
 ```
 
-> **Note:** On first run, `npx` will download the Microsoft Playwright MCP server (`@playwright/mcp`) and Chromium browser (~150MB total). This is cached for subsequent runs. See [MCP_PLAYWRIGHT.md](./MCP_PLAYWRIGHT.md) for details.
+> **Note:** First-time setup downloads Chromium (~280MB). This is cached in `~/.cache/ms-playwright/` for future use.
+
+For detailed setup instructions, see **[SETUP.md](./SETUP.md)**.
 
 ## 📖 Documentation
 
 | Document | Description |
 |----------|-------------|
+| **[SETUP.md](./SETUP.md)** | 🚀 **Start here!** Complete setup guide for local & Docker |
 | **[FINAL_COMPLETE_PLAN.md](./FINAL_COMPLETE_PLAN.md)** | Complete architecture, database design, implementation plan |
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | System architecture, data flow, technology stack |
 | **[SECURITY.md](./SECURITY.md)** | Credential management and security best practices |

@@ -9,7 +9,12 @@ export class MCPClient {
     console.log('🔌 Connecting to Microsoft Playwright MCP server...');
     this.transport = new StdioClientTransport({
       command: 'npx',
-      args: ['-y', '@playwright/mcp'],
+      args: [
+        '-y', 
+        '@playwright/mcp',
+        '--browser', 'chromium',  // Use installed Chromium instead of Chrome
+        '--headless'               // Run in headless mode for automation
+      ],
     });
 
     this.client = new Client(

@@ -12,7 +12,7 @@ async function testTokenRetrieval() {
 
   const transport = new StdioClientTransport({
     command: 'npx',
-    args: ['-y', '@playwright/mcp'],
+    args: ['-y', '@playwright/mcp', '--browser', 'chromium', '--headless'],
   });
 
   const client = new Client(
