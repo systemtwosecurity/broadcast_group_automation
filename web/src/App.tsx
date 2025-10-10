@@ -65,6 +65,7 @@ function App() {
 
   // Load status when environment changes
   useEffect(() => {
+    console.log(`🔄 Environment changed to: ${environment}`);
     loadStatus();
   }, [environment]);
 
@@ -79,9 +80,12 @@ function App() {
 
   const loadStatus = async () => {
     try {
+      console.log(`📊 Loading status for environment: ${environment}`);
       const { data } = await axios.get(`/api/status/${environment}`);
+      console.log(`✅ Loaded ${data.users.length} users for ${environment}`, data);
       setUserStatuses(data.users);
     } catch (error: any) {
+      console.error(`❌ Failed to load status for ${environment}:`, error);
       showMessage('error', 'Failed to load status');
     }
   };
@@ -236,7 +240,10 @@ function App() {
             {(['dev', 'qa', 'prod'] as Environment[]).map(env => (
               <button
                 key={env}
-                onClick={() => setEnvironment(env)}
+                onClick={() => {
+                  console.log(`🎯 Switching environment from ${environment} to ${env}`);
+                  setEnvironment(env);
+                }}
                 className={`px-6 py-3 rounded-lg font-medium transition-all ${
                   environment === env
                     ? 'bg-blue-500 text-white shadow-lg'
