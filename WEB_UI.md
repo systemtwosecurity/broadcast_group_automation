@@ -13,12 +13,14 @@ npm run install:web
 npm run dev:all
 
 # Or run them separately:
-npm run dev:api  # API server on port 3001
-npm run dev:web  # Web UI on port 3000
+npm run dev:api  # API server (auto-finds port 4501-4900)
+npm run dev:web  # Web UI (starts on port 4500)
 
 # Open your browser
-open http://localhost:3000
+open http://localhost:4500
 ```
+
+> **Note:** Ports are automatically selected from the range **4500-4900**. If the default ports are taken, the next available port in the range will be used.
 
 ## 📸 Features
 
@@ -64,7 +66,7 @@ open http://localhost:3000
 ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
 │   Browser   │────────▶│  Vite Dev   │────────▶│   Express   │
 │  (React UI) │◀────────│   Server    │◀────────│  API Server │
-│  Port 3000  │         │ (Proxy /api)│         │  Port 3001  │
+│  Port 4500  │         │ (Proxy /api)│         │ Port 4501+  │
 └─────────────┘         └─────────────┘         └─────────────┘
                                                        │
                                                        ▼
@@ -75,6 +77,8 @@ open http://localhost:3000
                                          │  - Database          │
                                          └──────────────────────┘
 ```
+
+**Port Range:** 4500-4900 (auto-selected)
 
 ## 🔌 API Endpoints
 
@@ -228,15 +232,24 @@ const handleMyFeature = async () => {
 ## 🐛 Troubleshooting
 
 ### Port Already in Use
+The application automatically finds available ports in the range 4500-4900. If you need to manually kill processes:
+
 ```bash
-# Kill processes on ports 3000/3001
-lsof -ti:3000 | xargs kill -9
-lsof -ti:3001 | xargs kill -9
+# Kill processes on specific ports
+lsof -ti:4500 | xargs kill -9
+lsof -ti:4501 | xargs kill -9
+
+# Or kill all processes in the range
+for port in {4500..4900}; do lsof -ti:$port | xargs kill -9 2>/dev/null; done
 ```
 
 ### CORS Issues
-- Ensure API server is running on port 3001
+- Ensure API server is running (check terminal output for port)
 - Vite proxy is configured in `web/vite.config.ts`
+- If API port changed, set `API_PORT` environment variable:
+  ```bash
+  API_PORT=4502 npm run dev:web
+  ```
 - Check browser console for specific CORS errors
 
 ### Status Not Updating

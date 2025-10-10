@@ -18,8 +18,11 @@ vim .env  # Add your ADMIN_TOKEN and USER_TOKEN_* values
 # 3. Start the application (API + Web UI)
 npm run dev:all
 
-# 4. Open http://localhost:3000 in your browser
+# 4. Open http://localhost:4500 in your browser
+#    (or whatever port Vite displays if 4500 is taken)
 ```
+
+> **Note:** The application automatically finds available ports in the range **4500-4900**.
 
 ### Option 2: CLI
 

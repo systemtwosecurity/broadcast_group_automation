@@ -1,5 +1,4 @@
 import { StateDatabase } from '../database/db.js';
-import { MCPClient } from '../mcp/client.js';
 import { DetectionsAPI } from '../api/detections.js';
 import { IntegrationsAPI } from '../api/integrations.js';
 import { ConfigLoader } from '../config/loader.js';
@@ -8,7 +7,6 @@ import type { Environment, WorkflowOptions, User, GroupConfig } from '../types/i
 export class SetupWorkflow {
   constructor(
     private db: StateDatabase,
-    private mcpClient: MCPClient,
     private detectionsAPI: DetectionsAPI,
     private integrationsAPI: IntegrationsAPI,
     private configLoader: ConfigLoader,

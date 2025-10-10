@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import { createServer } from 'net';
 import { StateDatabase } from '../database/db.js';
 import { ConfigLoader } from '../config/loader.js';
 import { Config } from '../config/config.js';
@@ -11,7 +12,28 @@ import type { Environment } from '../types/index.js';
 import axios from 'axios';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+
+// Find available port in range 4500-4900
+const findAvailablePort = async (startPort: number = 4501, endPort: number = 4900): Promise<number> => {
+  for (let port = startPort; port <= endPort; port++) {
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  throw new Error(`No available ports in range ${startPort}-${endPort}`);
+};
+
+const isPortAvailable = (port: number): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(port);
+  });
+};
 
 // Middleware
 app.use(cors());
@@ -184,10 +206,20 @@ app.post('/api/reset', async (req: Request, res: Response) => {
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 API server running on http://localhost:${PORT}`);
-});
+// Start server with dynamic port
+(async () => {
+  try {
+    const PORT = process.env.PORT ? parseInt(process.env.PORT) : await findAvailablePort();
+    
+    app.listen(PORT, () => {
+      console.log(`🚀 API server running on http://localhost:${PORT}`);
+      console.log(`📝 Make sure web UI is configured to use this port`);
+    });
+  } catch (error: any) {
+    console.error(`❌ Failed to start server: ${error.message}`);
+    process.exit(1);
+  }
+})();
 
 // Cleanup on exit
 process.on('SIGINT', () => {

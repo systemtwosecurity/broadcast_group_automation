@@ -49,7 +49,7 @@ program
     const detectionsAPI = new DetectionsAPI(detectionsUrl);
     
     try {
-      const workflow = new InvitationWorkflow(db, null as any, detectionsAPI, configLoader, environment);
+      const workflow = new InvitationWorkflow(db, detectionsAPI, configLoader, environment);
       await workflow.execute({ groupIds });
     } catch (error: any) {
       console.error(`\n❌ Error: ${error.message}\n`);
@@ -95,7 +95,7 @@ program
     const integrationsAPI = new IntegrationsAPI(integrationsUrl);
     
     try {
-      const workflow = new SetupWorkflow(db, null as any, detectionsAPI, integrationsAPI, configLoader, environment);
+      const workflow = new SetupWorkflow(db, detectionsAPI, integrationsAPI, configLoader, environment);
       await workflow.execute({ groupIds });
     } catch (error: any) {
       console.error(`\n❌ Error: ${error.message}\n`);

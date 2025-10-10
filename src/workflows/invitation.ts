@@ -1,5 +1,4 @@
 import { StateDatabase } from '../database/db.js';
-import { MCPClient } from '../mcp/client.js';
 import { DetectionsAPI } from '../api/detections.js';
 import { ConfigLoader } from '../config/loader.js';
 import type { Environment, WorkflowOptions, User } from '../types/index.js';
@@ -7,7 +6,6 @@ import type { Environment, WorkflowOptions, User } from '../types/index.js';
 export class InvitationWorkflow {
   constructor(
     private db: StateDatabase,
-    private mcpClient: MCPClient,
     private detectionsAPI: DetectionsAPI,
     private configLoader: ConfigLoader,
     private environment: Environment
