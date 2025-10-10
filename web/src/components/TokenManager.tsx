@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, Save, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Key, Save, Plus, Trash2, Eye, EyeOff, Edit2, X } from 'lucide-react';
 import axios from 'axios';
 
 interface Token {
@@ -16,6 +16,7 @@ export function TokenManager(_props: TokenManagerProps) {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [adminToken, setAdminToken] = useState('');
   const [showTokens, setShowTokens] = useState<{ [key: string]: boolean }>({});
+  const [editingToken, setEditingToken] = useState<{ id: string; token: string } | null>(null);
   const [newToken, setNewToken] = useState({ id: '', email: '', token: '' });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -40,9 +41,22 @@ export function TokenManager(_props: TokenManagerProps) {
       await axios.post('/api/tokens', tokenData);
       showMessage('success', 'Token saved successfully');
       loadTokens();
+      setEditingToken(null);
     } catch (error: any) {
       showMessage('error', 'Failed to save token');
     }
+  };
+
+  const startEditToken = (token: Token) => {
+    setEditingToken({ id: token.id, token: token.token === 'SKIP' ? '' : token.token });
+  };
+
+  const cancelEditToken = () => {
+    setEditingToken(null);
+  };
+
+  const saveEditedToken = async (tokenData: Token) => {
+    await saveToken(tokenData);
   };
 
   const deleteToken = async (id: string) => {
@@ -179,44 +193,94 @@ export function TokenManager(_props: TokenManagerProps) {
         <div className="space-y-2 max-h-96 overflow-y-auto">
           {tokens.map((token) => {
             const isSkip = isSkipToken(token.token);
+            const isEditing = editingToken?.id === token.id;
+            
             return (
               <div
                 key={token.id}
                 className={`flex items-center gap-2 p-3 rounded-lg border transition-colors ${
-                  isSkip
+                  isEditing
+                    ? 'bg-blue-500/10 dark:bg-blue-900/20 border-blue-500/30 dark:border-blue-700'
+                    : isSkip
                     ? 'bg-gray-500/10 dark:bg-gray-800/30 border-gray-500/20 dark:border-gray-600'
                     : 'bg-white/5 dark:bg-gray-900/50 border-white/10 dark:border-gray-700 hover:bg-white/10 dark:hover:bg-gray-900/70'
                 }`}
               >
-                <div className="flex-1 grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-2 text-white dark:text-gray-100 font-mono text-sm">{token.id}</div>
-                  <div className="col-span-4 text-white/70 dark:text-gray-300 text-sm truncate">{token.email}</div>
-                  <div className="col-span-6 flex items-center gap-2">
-                    {isSkip ? (
-                      <span className="px-2 py-1 bg-gray-500/20 dark:bg-gray-700/30 border border-gray-500/30 dark:border-gray-600 rounded text-gray-400 dark:text-gray-500 text-xs font-medium">
-                        NOT SET (SKIP)
-                      </span>
-                    ) : (
-                      <span className="text-white/50 dark:text-gray-400 font-mono text-xs">
-                        {showTokens[token.id] ? token.token : maskToken(token.token)}
-                      </span>
+                {isEditing ? (
+                  // Edit Mode
+                  <>
+                    <div className="flex-1 grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-2 text-white dark:text-gray-100 font-mono text-sm">{token.id}</div>
+                      <div className="col-span-4 text-white/70 dark:text-gray-300 text-sm truncate">{token.email}</div>
+                      <div className="col-span-6">
+                        <input
+                          type="password"
+                          value={editingToken.token}
+                          onChange={(e) => setEditingToken({ ...editingToken, token: e.target.value })}
+                          placeholder="Enter new token or leave empty for SKIP"
+                          className="w-full px-3 py-1.5 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded text-white dark:text-gray-100 placeholder-white/40 dark:placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => saveEditedToken({ ...token, token: editingToken.token })}
+                      className="px-2 py-1 bg-green-500 hover:bg-green-600 rounded text-white transition-colors"
+                      title="Save"
+                    >
+                      <Save className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={cancelEditToken}
+                      className="px-2 py-1 bg-gray-500 hover:bg-gray-600 rounded text-white transition-colors"
+                      title="Cancel"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
+                ) : (
+                  // View Mode
+                  <>
+                    <div className="flex-1 grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-2 text-white dark:text-gray-100 font-mono text-sm">{token.id}</div>
+                      <div className="col-span-4 text-white/70 dark:text-gray-300 text-sm truncate">{token.email}</div>
+                      <div className="col-span-6 flex items-center gap-2">
+                        {isSkip ? (
+                          <span className="px-2 py-1 bg-gray-500/20 dark:bg-gray-700/30 border border-gray-500/30 dark:border-gray-600 rounded text-gray-400 dark:text-gray-500 text-xs font-medium">
+                            NOT SET (SKIP)
+                          </span>
+                        ) : (
+                          <span className="text-white/50 dark:text-gray-400 font-mono text-xs">
+                            {showTokens[token.id] ? token.token : maskToken(token.token)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => startEditToken(token)}
+                      className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500/30 rounded text-blue-400 transition-colors"
+                      title="Edit token"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    {!isSkip && (
+                      <button
+                        onClick={() => toggleShowToken(token.id)}
+                        className="px-2 py-1 bg-white/10 dark:bg-gray-700 hover:bg-white/20 dark:hover:bg-gray-600 rounded text-white/70 dark:text-gray-300 transition-colors"
+                        title="Toggle visibility"
+                      >
+                        {showTokens[token.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     )}
-                  </div>
-                </div>
-                {!isSkip && (
-                  <button
-                    onClick={() => toggleShowToken(token.id)}
-                    className="px-2 py-1 bg-white/10 dark:bg-gray-700 hover:bg-white/20 dark:hover:bg-gray-600 rounded text-white/70 dark:text-gray-300 transition-colors"
-                  >
-                    {showTokens[token.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                    <button
+                      onClick={() => deleteToken(token.id)}
+                      className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-red-400 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={() => deleteToken(token.id)}
-                  className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-red-400 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
             );
           })}
