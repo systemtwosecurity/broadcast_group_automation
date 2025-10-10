@@ -60,7 +60,8 @@ For detailed setup instructions, see **[SETUP.md](./SETUP.md)**.
 
 | Document | Description |
 |----------|-------------|
-| **[SETUP.md](./SETUP.md)** | 🚀 **Start here!** Complete setup guide for local & Docker |
+| **[WEB_UI.md](./WEB_UI.md)** | 🎨 **Web UI Guide!** Complete guide to the responsive web interface |
+| **[SETUP.md](./SETUP.md)** | 🚀 Complete setup guide for local & Docker |
 | **[AUTH0_SETUP.md](./AUTH0_SETUP.md)** | 🔐 How to get Auth0 credentials (domain, client ID, secret) |
 | **[FINAL_COMPLETE_PLAN.md](./FINAL_COMPLETE_PLAN.md)** | Complete architecture, database design, implementation plan |
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | System architecture, data flow, technology stack |
