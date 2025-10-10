@@ -30,21 +30,23 @@ program
     // Ensure data directory exists
     mkdirSync('./data', { recursive: true });
     
+    // Load environment-specific configuration
+    const { Config } = await import('../config/config.js');
+    Config.loadEnvironment(environment);
+    
     // Validate environment variables
     try {
-      const { Config } = await import('../config/config.js');
       Config.validate();
     } catch (error: any) {
       console.error(`\n❌ Configuration Error: ${error.message}\n`);
-      console.error('💡 Make sure to create a .env file with required variables.\n');
-      console.error('   See .env.example for reference.\n');
+      console.error(`💡 Make sure to create a .env.${environment} file with required variables.\n`);
+      console.error(`   See env.${environment}.example for reference.\n`);
       process.exit(1);
     }
     
     const db = new StateDatabase();
     const configLoader = new ConfigLoader();
     
-    const { Config } = await import('../config/config.js');
     const detectionsUrl = Config.getApiUrl('detections', environment);
     const detectionsAPI = new DetectionsAPI(detectionsUrl);
     
@@ -74,21 +76,23 @@ program
     // Ensure data directory exists
     mkdirSync('./data', { recursive: true });
     
+    // Load environment-specific configuration
+    const { Config } = await import('../config/config.js');
+    Config.loadEnvironment(environment);
+    
     // Validate environment variables
     try {
-      const { Config } = await import('../config/config.js');
       Config.validate();
     } catch (error: any) {
       console.error(`\n❌ Configuration Error: ${error.message}\n`);
-      console.error('💡 Make sure to create a .env file with required variables.\n');
-      console.error('   See .env.example for reference.\n');
+      console.error(`💡 Make sure to create a .env.${environment} file with required variables.\n`);
+      console.error(`   See env.${environment}.example for reference.\n`);
       process.exit(1);
     }
     
     const db = new StateDatabase();
     const configLoader = new ConfigLoader();
     
-    const { Config } = await import('../config/config.js');
     const detectionsUrl = Config.getApiUrl('detections', environment);
     const integrationsUrl = Config.getApiUrl('integrations', environment);
     const detectionsAPI = new DetectionsAPI(detectionsUrl);
@@ -112,11 +116,15 @@ program
   .command("status")
   .description("Show status of all groups")
   .option("-e, --env <environment>", "Environment (dev, qa, prod)", "dev")
-  .action((options) => {
+  .action(async (options) => {
     const environment = options.env as Environment;
     
     // Ensure data directory exists
     mkdirSync('./data', { recursive: true });
+    
+    // Load environment-specific configuration
+    const { Config } = await import('../config/config.js');
+    Config.loadEnvironment(environment);
     
     const db = new StateDatabase();
     const status = db.getAllStatus(environment);
@@ -205,6 +213,10 @@ program
     
     mkdirSync('./data', { recursive: true });
     
+    // Load environment-specific configuration
+    const { Config } = await import('../config/config.js');
+    Config.loadEnvironment(environment);
+    
     const db = new StateDatabase();
     const configLoader = new ConfigLoader();
     
@@ -233,7 +245,6 @@ program
       console.log(`\n🗑️  Deleting ${actionDesc} for ${environment} environment\n`);
       
       const axios = (await import('axios')).default;
-      const { Config } = await import('../config/config.js');
       
       for (const user of selectedUsers) {
         console.log(`─────────────────────────────────────`);

@@ -1,13 +1,36 @@
 import { config as loadEnv } from 'dotenv';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type { Environment } from '../types/index.js';
 
-// Load environment variables from .env file
-loadEnv();
-
 export class Config {
+  private static currentEnvironment: Environment = 'dev';
+
+  // Load environment-specific file
+  static loadEnvironment(environment: Environment): void {
+    this.currentEnvironment = environment;
+    
+    // Try environment-specific file first
+    const envFile = `.env.${environment}`;
+    const envPath = join(process.cwd(), envFile);
+    
+    if (existsSync(envPath)) {
+      // Load from environment-specific file
+      loadEnv({ path: envPath, override: true });
+      console.log(`📂 Loaded tokens from ${envFile}`);
+    } else {
+      // Fallback to .env
+      const fallbackPath = join(process.cwd(), '.env');
+      if (existsSync(fallbackPath)) {
+        loadEnv({ path: fallbackPath, override: true });
+        console.log(`📂 Loaded tokens from .env (${envFile} not found)`);
+      }
+    }
+  }
+
   // Environment
   static get environment(): Environment {
-    return (process.env.ENVIRONMENT || 'dev') as Environment;
+    return this.currentEnvironment;
   }
 
   // Admin Token
