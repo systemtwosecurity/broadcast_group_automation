@@ -11,9 +11,9 @@ Automate security content group and source creation across multiple platforms wi
 npm install
 npm run install:web
 
-# 2. Configure environment variables
-cp env.example .env
-vim .env  # Add your ADMIN_TOKEN and USER_TOKEN_* values
+# 2. Configure environment-specific variables
+cp env.dev.example .env.dev
+vim .env.dev  # Add your DEV ADMIN_TOKEN and USER_TOKEN_* values
 
 # 3. Start the application (API + Web UI)
 npm run dev:all
@@ -36,16 +36,20 @@ npm install
 # - Make any API call
 # - Copy the "Authorization: Bearer ..." header value (without "Bearer ")
 
-# 3. Configure environment variables
-cp env.example .env
-vim .env  # Add your ADMIN_TOKEN and USER_TOKEN_* values
+# 3. Configure environment-specific variables
+cp env.dev.example .env.dev
+vim .env.dev  # Add your DEV ADMIN_TOKEN and USER_TOKEN_* values
+
+# For QA/PROD, create .env.qa and .env.prod with their tokens
+# cp env.qa.example .env.qa
+# cp env.prod.example .env.prod
 
 # 4. Send invitations
 npm run dev -- invite --env dev
 
 # 5. (Wait for users to verify emails, then get their tokens)
 
-# 6. Add user tokens to .env and create groups/sources
+# 6. Add user tokens to .env.dev and create groups/sources
 npm run dev -- setup --env dev
 
 # 7. Check status

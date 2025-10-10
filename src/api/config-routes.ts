@@ -1,22 +1,34 @@
 import { Router, Request, Response } from 'express';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const router = Router();
 
-// Get all tokens (from .env) for a specific environment
+// Helper to get environment file path
+const getEnvPath = (environment: string): string => {
+  const envFile = `.env.${environment.toLowerCase()}`;
+  const envPath = join(process.cwd(), envFile);
+  
+  // Fallback to .env if environment-specific file doesn't exist
+  if (!existsSync(envPath)) {
+    return join(process.cwd(), '.env');
+  }
+  
+  return envPath;
+};
+
+// Get all tokens from environment-specific file
 router.get('/tokens/:environment', (req: Request, res: Response) => {
   try {
-    const environment = req.params.environment.toUpperCase(); // DEV, QA, PROD
-    const envPath = join(process.cwd(), '.env');
+    const environment = req.params.environment.toLowerCase(); // dev, qa, prod
+    const envPath = getEnvPath(environment);
     const envContent = readFileSync(envPath, 'utf-8');
     
     const tokens: any[] = [];
-    const adminTokenMatch = envContent.match(new RegExp(`ADMIN_TOKEN_${environment}=(.+)`));
-    const adminTokenFallback = envContent.match(/ADMIN_TOKEN=(.+)/);
+    const adminTokenMatch = envContent.match(/ADMIN_TOKEN=(.+)/);
     
-    // Extract environment-specific user tokens
-    const userTokenMatches = envContent.matchAll(new RegExp(`USER_TOKEN_([A-Z0-9_]+)_${environment}=(.+)`, 'g'));
+    // Extract user tokens (simple format without environment suffix)
+    const userTokenMatches = envContent.matchAll(/USER_TOKEN_([A-Z0-9_]+)=(.+)/g);
     for (const match of userTokenMatches) {
       const id = match[1].toLowerCase();
       const token = match[2].trim();
@@ -27,8 +39,7 @@ router.get('/tokens/:environment', (req: Request, res: Response) => {
       const user = usersContent.users.find((u: any) => u.id === id);
       
       // Generate environment-specific email
-      const emailSuffix = environment.toLowerCase();
-      const email = user?.email.replace(/_dev@/, `_${emailSuffix}@`) || `${id}_${emailSuffix}@unknown`;
+      const email = user?.email.replace(/_dev@/, `_${environment}@`) || `${id}_${environment}@unknown`;
       
       tokens.push({
         id,
@@ -38,7 +49,7 @@ router.get('/tokens/:environment', (req: Request, res: Response) => {
     }
     
     res.json({
-      adminToken: (adminTokenMatch ? adminTokenMatch[1].trim() : (adminTokenFallback ? adminTokenFallback[1].trim() : '')),
+      adminToken: adminTokenMatch ? adminTokenMatch[1].trim() : '',
       tokens,
     });
   } catch (error: any) {
@@ -46,7 +57,7 @@ router.get('/tokens/:environment', (req: Request, res: Response) => {
   }
 });
 
-// Save/Update token with environment
+// Save/Update token to environment-specific file
 router.post('/tokens', (req: Request, res: Response) => {
   try {
     const { id, email, token, environment } = req.body;
@@ -57,12 +68,17 @@ router.post('/tokens', (req: Request, res: Response) => {
     
     // If token is empty or not provided, use "SKIP"
     const tokenValue = token && token.trim() !== '' ? token.trim() : 'SKIP';
-    const env = environment.toUpperCase(); // DEV, QA, PROD
+    const env = environment.toLowerCase(); // dev, qa, prod
     
-    const envPath = join(process.cwd(), '.env');
-    let envContent = readFileSync(envPath, 'utf-8');
+    const envPath = getEnvPath(env);
+    let envContent = '';
     
-    const envKey = id === 'admin' ? `ADMIN_TOKEN_${env}` : `USER_TOKEN_${id.toUpperCase()}_${env}`;
+    // Read existing content or create new
+    if (existsSync(envPath)) {
+      envContent = readFileSync(envPath, 'utf-8');
+    }
+    
+    const envKey = id === 'admin' ? 'ADMIN_TOKEN' : `USER_TOKEN_${id.toUpperCase()}`;
     const envLine = `${envKey}=${tokenValue}`;
     
     // Check if key exists
@@ -72,7 +88,7 @@ router.post('/tokens', (req: Request, res: Response) => {
       envContent = envContent.replace(regex, envLine);
     } else {
       // Add new
-      envContent += `\n${envLine}`;
+      envContent += (envContent && !envContent.endsWith('\n') ? '\n' : '') + envLine + '\n';
     }
     
     writeFileSync(envPath, envContent);
@@ -90,28 +106,28 @@ router.post('/tokens', (req: Request, res: Response) => {
       }
     }
     
-    res.json({ success: true, message: 'Token saved' });
+    res.json({ success: true, message: `Token saved to .env.${env}` });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Delete token for specific environment
+// Delete token from environment-specific file
 router.delete('/tokens/:environment/:id', (req: Request, res: Response) => {
   try {
     const { id, environment } = req.params;
-    const env = environment.toUpperCase();
+    const env = environment.toLowerCase();
     
-    const envPath = join(process.cwd(), '.env');
+    const envPath = getEnvPath(env);
     let envContent = readFileSync(envPath, 'utf-8');
     
-    const envKey = id === 'admin' ? `ADMIN_TOKEN_${env}` : `USER_TOKEN_${id.toUpperCase()}_${env}`;
+    const envKey = id === 'admin' ? 'ADMIN_TOKEN' : `USER_TOKEN_${id.toUpperCase()}`;
     const regex = new RegExp(`^${envKey}=.+$\\n?`, 'm');
     
     envContent = envContent.replace(regex, '');
     writeFileSync(envPath, envContent);
     
-    res.json({ success: true, message: 'Token deleted' });
+    res.json({ success: true, message: `Token deleted from .env.${env}` });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
