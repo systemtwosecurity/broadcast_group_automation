@@ -145,6 +145,7 @@ export function GroupManager({ environment }: GroupManagerProps) {
 
   const GroupForm = ({ group, onSave, onCancel }: { group: GroupConfig; onSave: (g: GroupConfig) => void; onCancel: () => void }) => {
     const [formData, setFormData] = useState<GroupConfig>(group);
+    const [githubUrl, setGithubUrl] = useState('');
 
     const updateField = (path: string, value: any) => {
       const keys = path.split('.');
@@ -157,6 +158,59 @@ export function GroupManager({ environment }: GroupManagerProps) {
       current[keys[keys.length - 1]] = value;
       
       setFormData(updated);
+    };
+
+    const parseGithubUrl = (url: string) => {
+      try {
+        // Handle various GitHub URL formats:
+        // https://github.com/owner/repo
+        // https://github.com/owner/repo/tree/branch
+        // https://github.com/owner/repo/tree/branch/path/to/folder
+        // github.com/owner/repo
+        // owner/repo
+        
+        let cleanUrl = url.trim();
+        
+        // Remove protocol if present
+        cleanUrl = cleanUrl.replace(/^https?:\/\//, '');
+        
+        // Remove github.com if present
+        cleanUrl = cleanUrl.replace(/^github\.com\//, '');
+        
+        // Split by /
+        const parts = cleanUrl.split('/');
+        
+        if (parts.length < 2) {
+          showMessage('error', 'Invalid GitHub URL. Expected format: owner/repo or full GitHub URL');
+          return;
+        }
+        
+        const owner = parts[0];
+        const repo = parts[1];
+        let branch = 'main';
+        let rootPath = '';
+        
+        // Check if there's a branch specified
+        if (parts.length >= 4 && parts[2] === 'tree') {
+          branch = parts[3];
+          
+          // Check if there's a path after the branch
+          if (parts.length > 4) {
+            rootPath = '/' + parts.slice(4).join('/');
+          }
+        }
+        
+        // Update form data
+        const updated = { ...formData };
+        updated.source.connection_config.repository = `${owner}/${repo}`;
+        updated.source.connection_config.branch = branch;
+        updated.source.connection_config.root_path = rootPath;
+        
+        setFormData(updated);
+        showMessage('success', `Parsed: ${owner}/${repo} (branch: ${branch}${rootPath ? ', path: ' + rootPath : ''})`);
+      } catch (error: any) {
+        showMessage('error', `Failed to parse GitHub URL: ${error.message}`);
+      }
     };
 
     return (
@@ -223,6 +277,34 @@ export function GroupManager({ environment }: GroupManagerProps) {
         {/* Source Configuration */}
         <div className="space-y-4">
           <h4 className="text-md font-semibold text-white dark:text-gray-100">Source Configuration</h4>
+          
+          {/* GitHub URL Parser */}
+          <div className="p-4 bg-blue-500/10 dark:bg-blue-900/20 border border-blue-500/30 dark:border-blue-700 rounded-lg">
+            <label className="block text-sm font-medium text-blue-300 dark:text-blue-400 mb-2">
+              🔗 GitHub Repository URL (paste full URL or owner/repo)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={githubUrl}
+                onChange={(e) => setGithubUrl(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && parseGithubUrl(githubUrl)}
+                placeholder="e.g., https://github.com/SigmaHQ/sigma/tree/master/rules"
+                className="flex-1 px-4 py-2 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => parseGithubUrl(githubUrl)}
+                className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
+              >
+                Parse URL
+              </button>
+            </div>
+            <p className="text-xs text-white/50 dark:text-gray-400 mt-2">
+              Supports: full URLs, owner/repo, URLs with branch and path
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <input
               type="text"
@@ -239,28 +321,39 @@ export function GroupManager({ environment }: GroupManagerProps) {
               className="w-full px-4 py-2 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          
+          {/* Parsed Fields (Read-only style but editable) */}
           <div className="grid grid-cols-3 gap-4">
-            <input
-              type="text"
-              value={formData.source.connection_config.repository}
-              onChange={(e) => updateField('source.connection_config.repository', e.target.value)}
-              placeholder="Repository (owner/repo)"
-              className="w-full px-4 py-2 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="text"
-              value={formData.source.connection_config.branch}
-              onChange={(e) => updateField('source.connection_config.branch', e.target.value)}
-              placeholder="Branch"
-              className="w-full px-4 py-2 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="text"
-              value={formData.source.connection_config.root_path || ''}
-              onChange={(e) => updateField('source.connection_config.root_path', e.target.value)}
-              placeholder="Root path (optional)"
-              className="w-full px-4 py-2 bg-white/10 dark:bg-gray-800/50 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <div>
+              <label className="block text-xs text-white/70 dark:text-gray-300 mb-1">Repository</label>
+              <input
+                type="text"
+                value={formData.source.connection_config.repository}
+                onChange={(e) => updateField('source.connection_config.repository', e.target.value)}
+                placeholder="owner/repo"
+                className="w-full px-4 py-2 bg-green-500/10 dark:bg-green-900/20 border border-green-500/30 dark:border-green-700 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-white/70 dark:text-gray-300 mb-1">Branch</label>
+              <input
+                type="text"
+                value={formData.source.connection_config.branch}
+                onChange={(e) => updateField('source.connection_config.branch', e.target.value)}
+                placeholder="main"
+                className="w-full px-4 py-2 bg-green-500/10 dark:bg-green-900/20 border border-green-500/30 dark:border-green-700 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-white/70 dark:text-gray-300 mb-1">Root Path (optional)</label>
+              <input
+                type="text"
+                value={formData.source.connection_config.root_path || ''}
+                onChange={(e) => updateField('source.connection_config.root_path', e.target.value)}
+                placeholder="/rules"
+                className="w-full px-4 py-2 bg-green-500/10 dark:bg-green-900/20 border border-green-500/30 dark:border-green-700 rounded-lg text-white dark:text-gray-100 placeholder-white/50 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
+              />
+            </div>
           </div>
         </div>
 

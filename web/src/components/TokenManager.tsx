@@ -26,10 +26,12 @@ export function TokenManager(_props: TokenManagerProps) {
   const loadTokens = async () => {
     try {
       const { data } = await axios.get('/api/tokens');
+      console.log('Loaded tokens:', data);
       setTokens(data.tokens || []);
       setAdminToken(data.adminToken || '');
-    } catch (error) {
-      console.error('Failed to load tokens');
+    } catch (error: any) {
+      console.error('Failed to load tokens:', error);
+      showMessage('error', `Failed to load tokens: ${error.message}`);
     }
   };
 

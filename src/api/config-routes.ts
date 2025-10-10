@@ -13,8 +13,8 @@ router.get('/tokens', (req: Request, res: Response) => {
     const tokens: any[] = [];
     const adminTokenMatch = envContent.match(/ADMIN_TOKEN=(.+)/);
     
-    // Extract user tokens
-    const userTokenMatches = envContent.matchAll(/USER_TOKEN_([A-Z_]+)=(.+)/g);
+    // Extract user tokens (match uppercase letters, numbers, and underscores)
+    const userTokenMatches = envContent.matchAll(/USER_TOKEN_([A-Z0-9_]+)=(.+)/g);
     for (const match of userTokenMatches) {
       const id = match[1].toLowerCase();
       const token = match[2].trim();
