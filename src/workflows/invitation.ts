@@ -62,10 +62,16 @@ export class InvitationWorkflow {
       return;
     }
 
-    // Get admin token
+    // Get admin token with fresh browser context
     console.log("=== Admin Login ===");
     const { Config } = await import('../config/config.js');
     const appUrl = Config.getApiUrl('app', this.environment);
+    
+    // Close and reconnect to get fresh browser context (true incognito)
+    console.log("🔄 Starting fresh browser session...");
+    await this.mcpClient.close();
+    await this.mcpClient.connect();
+    
     const adminToken = await this.mcpClient.login(
       `${appUrl}/login`,
       usersConfig.admin.email,

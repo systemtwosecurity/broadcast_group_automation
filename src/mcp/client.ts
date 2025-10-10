@@ -94,243 +94,25 @@ export class MCPClient {
     console.log(`🔐 Logging in as ${email}...`);
 
     try {
-      // Navigate to app first to establish context, then clear everything
-      const appBaseUrl = loginUrl.replace('/login', '');
-      console.log(`   🧹 Clearing browser data for fresh session...`);
-      await this.client.callTool({
-        name: 'browser_navigate',
-        arguments: { url: appBaseUrl },
-      });
-      
-      await this.client.callTool({
-        name: 'browser_wait_for',
-        arguments: { time: 1 },
-      });
-      
-      // Clear all browser data
-      await this.client.callTool({
-        name: 'browser_evaluate',
-        arguments: {
-          function: `() => {
-            // Clear all storage
-            localStorage.clear();
-            sessionStorage.clear();
-            
-            // Clear all cookies for current domain and parent domains
-            document.cookie.split(';').forEach(cookie => {
-              const name = cookie.split('=')[0].trim();
-              if (name) {
-                // Current domain
-                document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
-                document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + window.location.hostname;
-                
-                // Parent domains (.s2s.ai, .dev.s2s.ai, etc.)
-                const parts = window.location.hostname.split('.');
-                for (let i = 0; i < parts.length - 1; i++) {
-                  const domain = parts.slice(i).join('.');
-                  document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.' + domain;
-                }
-              }
-            });
-            
-            return 'CLEARED';
-          }`,
-        },
-      });
-      
-      // Now navigate to login page with clean slate
+      // Navigate directly to login page
+      // (fresh browser context = no existing session)
       console.log(`   🔗 Navigating to login page...`);
       await this.client.callTool({
         name: 'browser_navigate',
         arguments: { url: loginUrl },
       });
 
-      // Wait longer for the Auth0 redirect and page load
+      // Wait for Auth0 redirect and page load
       await this.client.callTool({
         name: 'browser_wait_for',
         arguments: { time: 5 },
       });
 
-      // Check current URL
-      const initialUrlCheck = await this.client.callTool({
-        name: 'browser_evaluate',
-        arguments: {
-          function: `() => window.location.href`,
-        },
-      });
-      
-      const initialUrlContent = initialUrlCheck.content as Array<{ text?: string }> | undefined;
-      let currentPageUrl = initialUrlContent?.[0]?.text || '';
-      if (currentPageUrl.includes('### Result')) {
-        const lines = currentPageUrl.split('\n');
-        const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
-        if (resultIndex !== -1 && lines[resultIndex + 1]) {
-          currentPageUrl = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
-        }
-      }
-      
-      console.log(`   🌐 Current page: ${currentPageUrl}`);
-      
-      // If we're already logged in (on app homepage, not auth0.com), click login button
-      if (!currentPageUrl.includes('/login') && !currentPageUrl.includes('auth0.com')) {
-        console.log(`   🔄 Already on app page, clicking login button to re-authenticate...`);
-        
-        // Try to find and click the login button/link
-        try {
-          // Try clicking a link to /login first
-          await this.client.callTool({
-            name: 'browser_evaluate',
-            arguments: {
-              function: `() => {
-                const loginLink = document.querySelector('a[href="/login"]') || 
-                                 document.querySelector('a[href*="login"]') ||
-                                 Array.from(document.querySelectorAll('button, a')).find(el => 
-                                   el.textContent?.toLowerCase().includes('login') ||
-                                   el.textContent?.toLowerCase().includes('log in') ||
-                                   el.textContent?.toLowerCase().includes('sign in')
-                                 );
-                if (loginLink) {
-                  loginLink.click();
-                  return 'CLICKED';
-                }
-                return 'NOT_FOUND';
-              }`,
-            },
-          });
-        } catch (clickError) {
-          console.log(`   ⚠️  Could not find login button, attempting to navigate to /login...`);
-          await this.client.callTool({
-            name: 'browser_navigate',
-            arguments: { url: `${loginUrl}` },
-          });
-        }
-        
-        // Wait for Auth0 redirect
-        await this.client.callTool({
-          name: 'browser_wait_for',
-          arguments: { time: 5 },
-        });
-        
-        // Check if we're now on the login page
-        const afterClickUrl = await this.client.callTool({
-          name: 'browser_evaluate',
-          arguments: {
-            function: `() => window.location.href`,
-          },
-        });
-        
-        const afterClickContent = afterClickUrl.content as Array<{ text?: string }> | undefined;
-        let afterClickPageUrl = afterClickContent?.[0]?.text || '';
-        if (afterClickPageUrl.includes('### Result')) {
-          const lines = afterClickPageUrl.split('\n');
-          const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
-          if (resultIndex !== -1 && lines[resultIndex + 1]) {
-            afterClickPageUrl = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
-          }
-        }
-        
-        console.log(`   🌐 After clicking login: ${afterClickPageUrl}`);
-        
-        // If still not on auth page, try extracting tokens as fallback
-        if (!afterClickPageUrl.includes('/login') && !afterClickPageUrl.includes('auth0.com')) {
-          console.log(`   ⚠️  Still on app page after clicking login, extracting existing tokens...`);
-        
-        // Extract tokens from storage
-        const tokenExtract = await this.client.callTool({
-          name: 'browser_evaluate',
-          arguments: {
-            function: `() => {
-              const tokens = {
-                access_token: null,
-                refresh_token: null,
-                storage_keys: []
-              };
-              
-              // Check localStorage
-              for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key) {
-                  tokens.storage_keys.push('localStorage.' + key);
-                  const value = localStorage.getItem(key);
-                  if (key.includes('access') || key.includes('token')) {
-                    if (value && value.length > 20 && value.startsWith('eyJ')) {
-                      tokens.access_token = value;
-                    }
-                  }
-                  if (key.includes('refresh')) {
-                    if (value && value.length > 20) {
-                      tokens.refresh_token = value;
-                    }
-                  }
-                }
-              }
-              
-              // Check sessionStorage
-              for (let i = 0; i < sessionStorage.length; i++) {
-                const key = sessionStorage.key(i);
-                if (key) {
-                  tokens.storage_keys.push('sessionStorage.' + key);
-                  const value = sessionStorage.getItem(key);
-                  if (key.includes('access') || key.includes('token')) {
-                    if (value && value.length > 20 && value.startsWith('eyJ')) {
-                      tokens.access_token = value;
-                    }
-                  }
-                  if (key.includes('refresh')) {
-                    if (value && value.length > 20) {
-                      tokens.refresh_token = value;
-                    }
-                  }
-                }
-              }
-              
-              return JSON.stringify(tokens);
-            }`,
-          },
-        });
-        
-        const tokenContent = tokenExtract.content as Array<{ text?: string }> | undefined;
-        let tokensRaw = tokenContent?.[0]?.text || '{}';
-        
-        if (tokensRaw.includes('### Result')) {
-          const lines = tokensRaw.split('\n');
-          const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
-          if (resultIndex !== -1 && lines[resultIndex + 1]) {
-            tokensRaw = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
-          }
-        }
-        
-        const tokens = JSON.parse(tokensRaw);
-        
-        console.log(`📦 Available storage keys: ${tokens.storage_keys.join(', ')}`);
-        
-        if (tokens.refresh_token) {
-          console.log(`✅ Found refresh_token: ${tokens.refresh_token.substring(0, 30)}...`);
-          const tokenResponse = await this.refreshAccessToken(
-            auth0Domain,
-            clientId,
-            clientSecret,
-            tokens.refresh_token
-          );
-          return tokenResponse.access_token;
-        }
-        
-        if (tokens.access_token) {
-          console.log(`✅ Found access_token directly: ${tokens.access_token.substring(0, 30)}...`);
-          return tokens.access_token;
-        }
-        
-          throw new Error('Already logged in but no tokens found in storage');
-        }
-        // If we successfully navigated to login/auth page after clicking, continue with login flow below
-        currentPageUrl = afterClickPageUrl;
-      }
-      
-      // At this point, we should be on the Auth0 login page
-      // Wait a bit longer for the page to stabilize
+      // With fresh browser context, we should be on Auth0 login page
+      // Wait for the form to be ready
       await this.client.callTool({
         name: 'browser_wait_for',
-        arguments: { time: 3 },
+        arguments: { time: 2 },
       });
 
       // Use browser_evaluate to directly fill the form (more reliable for Auth0)

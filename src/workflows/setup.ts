@@ -90,6 +90,11 @@ export class SetupWorkflow {
       console.log(`─────────────────────────────────────`);
 
       try {
+        // Close and reconnect to get fresh browser context (true incognito)
+        console.log(`🔄 Starting fresh browser session for ${user.id}...`);
+        await this.mcpClient.close();
+        await this.mcpClient.connect();
+        
         // Get user token
         console.log(`🔐 Logging in as ${user.email}...`);
         const userToken = await this.mcpClient.login(
