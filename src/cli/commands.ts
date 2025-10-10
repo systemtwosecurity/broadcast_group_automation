@@ -183,13 +183,20 @@ program
 // ============================================
 program
   .command("cleanup")
-  .description("Delete groups and sources from API and database")
+  .description("Delete groups and/or sources from API and database")
   .option("-e, --env <environment>", "Environment (dev, qa, prod)", "dev")
   .option("-g, --groups <groups>", "Comma-separated group IDs or 'all'", "all")
+  .option("--sources-only", "Delete only sources (keep groups)")
+  .option("--groups-only", "Delete only groups (keep sources)")
   .option("--confirm", "Confirm deletion (required)")
   .action(async (options) => {
     if (!options.confirm) {
       console.error("\n⚠️  Please add --confirm flag to delete groups and sources\n");
+      process.exit(1);
+    }
+    
+    if (options.sourcesOnly && options.groupsOnly) {
+      console.error("\n⚠️  Cannot use both --sources-only and --groups-only\n");
       process.exit(1);
     }
     
@@ -216,7 +223,14 @@ program
         }
       }
       
-      console.log(`\n🗑️  Deleting groups and sources for ${environment} environment\n`);
+      const deleteGroups = !options.sourcesOnly;
+      const deleteSources = !options.groupsOnly;
+      
+      let actionDesc = "groups and sources";
+      if (options.sourcesOnly) actionDesc = "sources only";
+      if (options.groupsOnly) actionDesc = "groups only";
+      
+      console.log(`\n🗑️  Deleting ${actionDesc} for ${environment} environment\n`);
       
       const axios = (await import('axios')).default;
       const { Config } = await import('../config/config.js');
@@ -233,9 +247,11 @@ program
         }
         
         const status = db.getUserStatus(user.id, environment);
+        let deletedAnything = false;
         
-        // Delete source first (if exists)
-        if (status.sourceCreated && status.sourceApiId) {
+        // Delete source first (if exists and requested)
+        if (deleteSources && status.sourceCreated && status.sourceApiId) {
+          deletedAnything = true;
           try {
             console.log(`🗑️  Deleting source: ${status.sourceApiId}...`);
             await axios.delete(
@@ -257,8 +273,9 @@ program
           }
         }
         
-        // Delete group (if exists)
-        if (status.groupCreated && status.groupApiId) {
+        // Delete group (if exists and requested)
+        if (deleteGroups && status.groupCreated && status.groupApiId) {
+          deletedAnything = true;
           try {
             console.log(`🗑️  Deleting group: ${status.groupApiId}...`);
             await axios.delete(
@@ -280,9 +297,21 @@ program
           }
         }
         
-        // Remove from database
-        db.resetUser(user.id, environment);
-        console.log(`✅ Removed from database\n`);
+        // Remove from database (selective based on what was deleted)
+        if (!deletedAnything) {
+          console.log(`ℹ️  Nothing to delete (not created yet)\n`);
+        } else {
+          if (deleteSources && deleteGroups) {
+            db.resetUser(user.id, environment);
+            console.log(`✅ Removed all records from database\n`);
+          } else if (deleteGroups) {
+            db.resetUserGroups(user.id, environment);
+            console.log(`✅ Removed group records from database\n`);
+          } else if (deleteSources) {
+            db.resetUserSources(user.id, environment);
+            console.log(`✅ Removed source records from database\n`);
+          }
+        }
       }
       
       console.log("═══════════════════════════════════════");

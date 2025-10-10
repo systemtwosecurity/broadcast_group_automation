@@ -70,6 +70,12 @@ npm run dev -- status --env dev
 # Delete groups and sources (requires --confirm)
 npm run dev -- cleanup --env dev --confirm [--groups sigmahq,yara_100days]
 
+# Delete only sources (keep groups)
+npm run dev -- cleanup --env dev --sources-only --confirm
+
+# Delete only groups (keep sources)
+npm run dev -- cleanup --env dev --groups-only --confirm
+
 # Reset database state (does NOT delete from API)
 npm run dev -- reset --env dev --confirm [--groups sigmahq,yara_100days]
 

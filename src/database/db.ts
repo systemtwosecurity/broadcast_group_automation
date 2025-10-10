@@ -183,6 +183,14 @@ export class StateDatabase {
     transaction();
   }
 
+  resetUserGroups(userId: string, environment: Environment) {
+    this.db.prepare(`DELETE FROM groups WHERE user_id = ? AND environment = ?`).run(userId, environment);
+  }
+
+  resetUserSources(userId: string, environment: Environment) {
+    this.db.prepare(`DELETE FROM sources WHERE user_id = ? AND environment = ?`).run(userId, environment);
+  }
+
   resetEnvironment(environment: Environment) {
     const transaction = this.db.transaction(() => {
       this.db.prepare(`DELETE FROM invitations WHERE environment = ?`).run(environment);
