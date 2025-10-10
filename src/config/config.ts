@@ -5,10 +5,18 @@ import type { Environment } from '../types/index.js';
 
 export class Config {
   private static currentEnvironment: Environment = 'dev';
+  private static tokenKeys = ['ADMIN_TOKEN', 'USER_TOKEN_SIGMAHQ', 'USER_TOKEN_YARA_100DAYS', 
+                               'USER_TOKEN_GOOGLESECOPS', 'USER_TOKEN_AZURE_SENTINEL', 
+                               'USER_TOKEN_REVERSINGLABS_YARA', 'USER_TOKEN_SPLUNKSECURITY'];
 
   // Load environment-specific file
   static loadEnvironment(environment: Environment): void {
     this.currentEnvironment = environment;
+    
+    // Clear existing tokens from process.env to prevent leakage
+    this.tokenKeys.forEach(key => {
+      delete process.env[key];
+    });
     
     // Try environment-specific file first
     const envFile = `.env.${environment}`;

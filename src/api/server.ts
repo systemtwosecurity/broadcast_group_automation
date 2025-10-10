@@ -70,6 +70,10 @@ app.get('/api/groups', (req: Request, res: Response) => {
 app.get('/api/status/:environment', (req: Request, res: Response) => {
   try {
     const environment = req.params.environment as Environment;
+    
+    // Load environment-specific tokens
+    Config.loadEnvironment(environment);
+    
     const usersConfig = configLoader.loadUsers();
     const allUsers = usersConfig.users;
     
@@ -81,15 +85,31 @@ app.get('/api/status/:environment', (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         invited: status.invited,
-        hasToken,
         groupCreated: status.groupCreated,
-        groupApiId: status.groupApiId,
         sourceCreated: status.sourceCreated,
-        sourceApiId: status.sourceApiId
+        groupApiId: status.groupApiId,
+        sourceApiId: status.sourceApiId,
+        hasToken: hasToken,
       };
     });
-    
-    res.json({ users: statusData, environment });
+
+    const adminUser = usersConfig.admin;
+    const adminStatus = db.getUserStatus('admin', environment);
+    const adminHasToken = !!Config.adminToken;
+
+    res.json({
+      admin: {
+        id: 'admin',
+        email: adminUser.email,
+        invited: adminStatus.invited,
+        groupCreated: adminStatus.groupCreated,
+        sourceCreated: adminStatus.sourceCreated,
+        groupApiId: adminStatus.groupApiId,
+        sourceApiId: adminStatus.sourceApiId,
+        hasToken: adminHasToken,
+      },
+      users: statusData
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -99,6 +119,9 @@ app.get('/api/status/:environment', (req: Request, res: Response) => {
 app.post('/api/invite', async (req: Request, res: Response) => {
   try {
     const { environment, groupIds } = req.body;
+    
+    // Load environment-specific tokens
+    Config.loadEnvironment(environment);
     
     const detectionsUrl = Config.getApiUrl('detections', environment);
     const detectionsAPI = new DetectionsAPI(detectionsUrl);
@@ -116,6 +139,9 @@ app.post('/api/invite', async (req: Request, res: Response) => {
 app.post('/api/setup', async (req: Request, res: Response) => {
   try {
     const { environment, groupIds } = req.body;
+    
+    // Load environment-specific tokens
+    Config.loadEnvironment(environment);
     
     const detectionsUrl = Config.getApiUrl('detections', environment);
     const integrationsUrl = Config.getApiUrl('integrations', environment);
@@ -135,6 +161,9 @@ app.post('/api/setup', async (req: Request, res: Response) => {
 app.post('/api/cleanup', async (req: Request, res: Response) => {
   try {
     const { environment, groupIds, sourcesOnly, groupsOnly } = req.body;
+    
+    // Load environment-specific tokens
+    Config.loadEnvironment(environment);
     
     const usersConfig = configLoader.loadUsers();
     const allUsers = usersConfig.users;
