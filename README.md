@@ -4,6 +4,25 @@ Automate security content group and source creation across multiple platforms wi
 
 ## 🚀 Quick Start
 
+### Option 1: Web UI (Recommended)
+
+```bash
+# 1. Install dependencies
+npm install
+npm run install:web
+
+# 2. Configure environment variables
+cp env.example .env
+vim .env  # Add your ADMIN_TOKEN and USER_TOKEN_* values
+
+# 3. Start the application (API + Web UI)
+npm run dev:all
+
+# 4. Open http://localhost:3000 in your browser
+```
+
+### Option 2: CLI
+
 ```bash
 # 1. Install dependencies
 npm install
@@ -51,9 +70,12 @@ For detailed setup instructions, see **[SETUP.md](./SETUP.md)**.
 
 ## 🎯 Features
 
+- ✅ **Beautiful Web UI** - Responsive single-page application with real-time status
 - ✅ **Smart State Tracking** - SQLite database remembers everything
 - ✅ **Two-Phase Workflow** - Invitations → Manual Verification → Setup
-- ✅ **Cleanup Command** - Delete groups and sources from API and database
+- ✅ **Granular Cleanup** - Delete groups, sources, or both with selective control
+- ✅ **Multi-Environment** - dev, qa, prod support with easy switching
+- ✅ **Group Selection** - Target specific groups or process all at once
 
 ## 📋 CLI Commands
 

@@ -1,9 +1,11 @@
 # Dependencies
 node_modules/
 package-lock.json
+web/node_modules/
 
 # Build output
 dist/
+web/dist/
 *.tsbuildinfo
 
 # Database
