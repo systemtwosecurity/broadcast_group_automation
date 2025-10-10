@@ -94,12 +94,16 @@ export class MCPClient {
     console.log(`🔐 Logging in as ${email}...`);
 
     try {
-      // First, logout from Auth0 to clear SSO session
+      // First, call the proper logout endpoint to clear SSO session
       console.log(`   🧹 Logging out from Auth0 SSO...`);
-      const logoutUrl = loginUrl.replace('/login', '/logout');
+      
+      // Get the base URL from loginUrl (e.g., https://detections.dev.s2s.ai)
+      const appBaseUrl = loginUrl.replace('/login', '');
+      
+      // Navigate to app to ensure we have the right domain for API call
       await this.client.callTool({
         name: 'browser_navigate',
-        arguments: { url: logoutUrl },
+        arguments: { url: appBaseUrl },
       });
       
       await this.client.callTool({
@@ -107,7 +111,62 @@ export class MCPClient {
         arguments: { time: 2 },
       });
       
-      // Clear all cookies and storage
+      // Call the logout API endpoint and get the Auth0 logout URL
+      const logoutResult = await this.client.callTool({
+        name: 'browser_evaluate',
+        arguments: {
+          function: `async () => {
+            try {
+              const response = await fetch('/api/v1/auth/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
+              });
+              const data = await response.json();
+              return JSON.stringify({ 
+                success: true, 
+                logout_url: data.data?.logout_url || null 
+              });
+            } catch (error) {
+              return JSON.stringify({ 
+                success: false, 
+                error: error.message 
+              });
+            }
+          }`,
+        },
+      });
+      
+      const logoutContent = logoutResult.content as Array<{ text?: string }> | undefined;
+      let logoutRaw = logoutContent?.[0]?.text || '{}';
+      
+      if (logoutRaw.includes('### Result')) {
+        const lines = logoutRaw.split('\n');
+        const resultIndex = lines.findIndex(line => line.startsWith('### Result'));
+        if (resultIndex !== -1 && lines[resultIndex + 1]) {
+          logoutRaw = lines[resultIndex + 1].trim().replace(/^["']|["']$/g, '');
+        }
+      }
+      
+      const logoutData = JSON.parse(logoutRaw);
+      
+      // If we got a logout URL, navigate to it to clear Auth0 SSO
+      if (logoutData.logout_url) {
+        console.log(`   🔗 Navigating to Auth0 logout...`);
+        await this.client.callTool({
+          name: 'browser_navigate',
+          arguments: { url: logoutData.logout_url },
+        });
+        
+        await this.client.callTool({
+          name: 'browser_wait_for',
+          arguments: { time: 3 },
+        });
+      } else {
+        console.log(`   ⚠️  No logout URL returned, clearing local storage...`);
+      }
+      
+      // Clear all local storage and cookies
       await this.client.callTool({
         name: 'browser_evaluate',
         arguments: {
