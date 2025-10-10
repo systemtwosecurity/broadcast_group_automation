@@ -135,17 +135,43 @@ export class SetupWorkflow {
             } catch (error: any) {
               if (error.response?.status === 400 && error.response?.data?.code === 'DUPLICATE_GROUP_NAME') {
                 console.log(`   ℹ️  Group "${groupConfig.name}" already exists`);
-                // Group exists but we need the ID to create sources
-                // Try to get it from the database or query the API
+                
+                // Try database first
                 const existingGroupId = this.db.getGroupApiId(user.id, this.environment);
                 if (existingGroupId) {
                   groupApiId = existingGroupId;
                   console.log(`   📝 Using existing group ID from database: ${groupApiId}`);
                 } else {
-                  console.log(`   ⚠️  Group exists but ID not in database`);
-                  console.log(`   💡 Trying to create source anyway (API might auto-link)`);
-                  // Set to empty string so source creation attempts with "<group_id>" placeholder
-                  groupApiId = '';
+                  // Query API to find the group by name
+                  console.log(`   🔍 Querying API for existing group...`);
+                  try {
+                    const groupsResponse = await axios.get(
+                      `${Config.getApiUrl('detections', this.environment)}/api/v1/groups`,
+                      {
+                        headers: {
+                          'Authorization': `Bearer ${userToken}`,
+                          'Content-Type': 'application/json'
+                        }
+                      }
+                    );
+                    
+                    // Find the group by name
+                    const groups = groupsResponse.data.data || groupsResponse.data.groups || groupsResponse.data;
+                    const existingGroup = groups.find((g: any) => g.name === groupConfig.name);
+                    
+                    if (existingGroup && existingGroup.id) {
+                      groupApiId = existingGroup.id;
+                      console.log(`   ✅ Found existing group ID: ${groupApiId}`);
+                      // Save to database for future use
+                      this.db.recordGroupCreation(user.id, this.environment, groupApiId, groupConfig.name);
+                    } else {
+                      console.log(`   ⚠️  Could not find group in API response`);
+                      groupApiId = '';
+                    }
+                  } catch (fetchError: any) {
+                    console.log(`   ⚠️  Failed to fetch groups: ${fetchError.message}`);
+                    groupApiId = '';
+                  }
                 }
               } else {
                 // Different error - log and throw
