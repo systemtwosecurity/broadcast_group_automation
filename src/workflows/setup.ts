@@ -130,19 +130,27 @@ export class SetupWorkflow {
               groupApiId = groupResponse.data.data?.id || groupResponse.data.id;
             } catch (error: any) {
               if (error.response?.status === 400 && error.response?.data?.code === 'DUPLICATE_GROUP_NAME') {
-                console.log(`   ℹ️  Group "${groupConfig.name}" already exists (created outside automation)`);
-                console.log(`   ⚠️  Skipping group creation, but sources won't be created without group ID`);
-                console.log(`   💡 To fix: Manually get the group ID and add it to the database`);
-                // Skip this user since we don't have the group ID
-                results.skipped.push(user.id);
-                continue;
+                console.log(`   ℹ️  Group "${groupConfig.name}" already exists`);
+                // Group exists but we need the ID to create sources
+                // Try to get it from the database or query the API
+                const existingGroupId = this.db.getGroupApiId(user.id, this.environment);
+                if (existingGroupId) {
+                  groupApiId = existingGroupId;
+                  console.log(`   📝 Using existing group ID from database: ${groupApiId}`);
+                } else {
+                  console.log(`   ⚠️  Group exists but ID not in database`);
+                  console.log(`   💡 Trying to create source anyway (API might auto-link)`);
+                  // Set to empty string so source creation attempts with "<group_id>" placeholder
+                  groupApiId = '';
+                }
+              } else {
+                // Different error - log and throw
+                if (error.response) {
+                  console.error(`   ❌ API Error: ${error.response.status} ${error.response.statusText}`);
+                  console.error(`   📦 Response:`, JSON.stringify(error.response.data, null, 2));
+                }
+                throw error;
               }
-              
-              if (error.response) {
-                console.error(`   ❌ API Error: ${error.response.status} ${error.response.statusText}`);
-                console.error(`   📦 Response:`, JSON.stringify(error.response.data, null, 2));
-              }
-              throw error;
             }
           
           if (groupApiId) {
