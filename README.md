@@ -64,6 +64,7 @@ For detailed setup instructions, see **[SETUP.md](./SETUP.md)**.
 | Document | Description |
 |----------|-------------|
 | **[WEB_UI.md](./WEB_UI.md)** | 🎨 **Web UI Guide!** Complete guide to the responsive web interface |
+| **[CONFIGURATION_MANAGEMENT.md](./CONFIGURATION_MANAGEMENT.md)** | ⚙️ **Configuration Guide!** Token & group management, dark mode, auto-email generation |
 | **[SETUP.md](./SETUP.md)** | 🚀 Complete setup guide for local & Docker |
 | **[AUTH0_SETUP.md](./AUTH0_SETUP.md)** | 🔐 How to get Auth0 credentials (domain, client ID, secret) |
 | **[FINAL_COMPLETE_PLAN.md](./FINAL_COMPLETE_PLAN.md)** | Complete architecture, database design, implementation plan |
@@ -75,6 +76,9 @@ For detailed setup instructions, see **[SETUP.md](./SETUP.md)**.
 ## 🎯 Features
 
 - ✅ **Beautiful Web UI** - Responsive single-page application with real-time status
+- ✅ **Dark Mode** - System-aware dark/light mode with smooth transitions
+- ✅ **Configuration Management** - Manage tokens, groups, and sources directly in the UI
+- ✅ **Auto-Email Generation** - Smart email aliases based on environment and group ID
 - ✅ **Smart State Tracking** - SQLite database remembers everything
 - ✅ **Two-Phase Workflow** - Invitations → Manual Verification → Setup
 - ✅ **Granular Cleanup** - Delete groups, sources, or both with selective control

@@ -6,13 +6,18 @@ import {
   FolderPlus,
   Trash2,
   RotateCcw,
-  Play,
   CheckCircle2,
   XCircle,
   Clock,
   AlertCircle,
   Loader2,
+  Key,
+  Moon,
+  Sun,
+  Layout,
 } from 'lucide-react';
+import { TokenManager } from './components/TokenManager';
+import { GroupManager } from './components/GroupManager';
 
 // Types
 interface Group {
@@ -32,14 +37,26 @@ interface UserStatus {
 }
 
 type Environment = 'dev' | 'qa' | 'prod';
+type Tab = 'dashboard' | 'tokens' | 'groups';
 
 function App() {
   const [environment, setEnvironment] = useState<Environment>('dev');
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [darkMode, setDarkMode] = useState(true);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [userStatuses, setUserStatuses] = useState<UserStatus[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Apply dark mode to document
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
 
   // Load groups on mount
   useEffect(() => {
@@ -162,18 +179,36 @@ function App() {
     );
   };
 
+  const tabs = [
+    { id: 'dashboard' as Tab, label: 'Dashboard', icon: Layout },
+    { id: 'tokens' as Tab, label: 'Tokens', icon: Key },
+    { id: 'groups' as Tab, label: 'Groups', icon: FolderPlus },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
+    <div className={`min-h-screen transition-colors duration-200 ${
+      darkMode 
+        ? 'bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900'
+        : 'bg-gradient-to-br from-gray-50 via-blue-50 to-gray-50'
+    }`}>
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
-            <Server className="w-10 h-10" />
-            Broadcast Group Automation
-          </h1>
-          <p className="text-blue-200">
-            Manage security content groups and sources across environments
-          </p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold dark:text-white text-gray-900 mb-2 flex items-center gap-3">
+              <Server className="w-10 h-10" />
+              Broadcast Group Automation
+            </h1>
+            <p className="dark:text-blue-200 text-blue-900">
+              Manage security content groups and sources across environments
+            </p>
+          </div>
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="p-3 rounded-lg dark:bg-white/10 bg-gray-200 dark:hover:bg-white/20 hover:bg-gray-300 transition-colors"
+          >
+            {darkMode ? <Sun className="w-6 h-6 text-yellow-400" /> : <Moon className="w-6 h-6 text-blue-900" />}
+          </button>
         </div>
 
         {/* Message */}
@@ -195,8 +230,8 @@ function App() {
         )}
 
         {/* Environment Selector */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 mb-6 border border-white/20">
-          <h2 className="text-xl font-semibold text-white mb-4">Environment</h2>
+        <div className="dark:bg-white/10 bg-white backdrop-blur-lg rounded-lg p-6 mb-6 border dark:border-white/20 border-gray-300 shadow-lg">
+          <h2 className="text-xl font-semibold dark:text-white text-gray-900 mb-4">Environment</h2>
           <div className="flex gap-3">
             {(['dev', 'qa', 'prod'] as Environment[]).map(env => (
               <button
@@ -205,7 +240,7 @@ function App() {
                 className={`px-6 py-3 rounded-lg font-medium transition-all ${
                   environment === env
                     ? 'bg-blue-500 text-white shadow-lg'
-                    : 'bg-white/10 text-white/70 hover:bg-white/20'
+                    : 'dark:bg-white/10 bg-gray-100 dark:text-white/70 text-gray-700 dark:hover:bg-white/20 hover:bg-gray-200'
                 }`}
               >
                 {env.toUpperCase()}
@@ -214,173 +249,213 @@ function App() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Group Selection */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-white/20">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">Select Groups</h2>
-              <button
-                onClick={toggleAllGroups}
-                className="text-sm text-blue-300 hover:text-blue-200"
-              >
-                {selectedGroups.length === groups.length ? 'Deselect All' : 'Select All'}
-              </button>
-            </div>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {groups.map(group => (
-                <label
-                  key={group.id}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition-colors"
+        {/* Tabs */}
+        <div className="dark:bg-white/10 bg-white backdrop-blur-lg rounded-lg border dark:border-white/20 border-gray-300 shadow-lg mb-6">
+          <div className="flex border-b dark:border-white/20 border-gray-300">
+            {tabs.map(tab => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-medium transition-all ${
+                    activeTab === tab.id
+                      ? 'dark:text-blue-400 text-blue-600 border-b-2 border-blue-500 dark:bg-white/5 bg-blue-50'
+                      : 'dark:text-white/70 text-gray-600 dark:hover:bg-white/5 hover:bg-gray-50'
+                  }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedGroups.includes(group.id)}
-                    onChange={() => toggleGroupSelection(group.id)}
-                    className="w-5 h-5 rounded"
-                  />
-                  <div>
-                    <div className="text-white font-medium">{group.name}</div>
-                    <div className="text-white/50 text-sm">{group.id}</div>
+                  <Icon className="w-5 h-5" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="p-6">
+            {/* Dashboard Tab */}
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Group Selection */}
+                  <div className="dark:bg-white/5 bg-gray-50 rounded-lg p-6 border dark:border-white/10 border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-xl font-semibold dark:text-white text-gray-900">Select Groups</h2>
+                      <button
+                        onClick={toggleAllGroups}
+                        className="text-sm dark:text-blue-300 text-blue-600 dark:hover:text-blue-200 hover:text-blue-700"
+                      >
+                        {selectedGroups.length === groups.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {groups.map(group => (
+                        <label
+                          key={group.id}
+                          className="flex items-center gap-3 p-3 rounded-lg dark:bg-white/5 bg-white dark:hover:bg-white/10 hover:bg-gray-100 cursor-pointer transition-colors border dark:border-white/10 border-gray-200"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedGroups.includes(group.id)}
+                            onChange={() => toggleGroupSelection(group.id)}
+                            className="w-5 h-5 rounded"
+                          />
+                          <div>
+                            <div className="dark:text-white text-gray-900 font-medium">{group.name}</div>
+                            <div className="dark:text-white/50 text-gray-500 text-sm">{group.id}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="mt-4 text-sm dark:text-white/50 text-gray-600">
+                      {selectedGroups.length > 0
+                        ? `${selectedGroups.length} group(s) selected`
+                        : 'All groups will be processed'}
+                    </div>
                   </div>
-                </label>
-              ))}
-            </div>
-            <div className="mt-4 text-sm text-white/50">
-              {selectedGroups.length > 0
-                ? `${selectedGroups.length} group(s) selected`
-                : 'All groups will be processed'}
-            </div>
-          </div>
 
-          {/* Actions */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-white/20">
-            <h2 className="text-xl font-semibold text-white mb-4">Actions</h2>
-            <div className="space-y-3">
-              <button
-                onClick={handleInvite}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Users className="w-5 h-5" />}
-                Send Invitations
-              </button>
+                  {/* Actions */}
+                  <div className="dark:bg-white/5 bg-gray-50 rounded-lg p-6 border dark:border-white/10 border-gray-200">
+                    <h2 className="text-xl font-semibold dark:text-white text-gray-900 mb-4">Actions</h2>
+                    <div className="space-y-3">
+                      <button
+                        onClick={handleInvite}
+                        disabled={loading}
+                        className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Users className="w-5 h-5" />}
+                        Send Invitations
+                      </button>
 
-              <button
-                onClick={handleSetup}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <FolderPlus className="w-5 h-5" />}
-                Setup Groups & Sources
-              </button>
+                      <button
+                        onClick={handleSetup}
+                        disabled={loading}
+                        className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <FolderPlus className="w-5 h-5" />}
+                        Setup Groups & Sources
+                      </button>
 
-              <div className="border-t border-white/20 my-4"></div>
+                      <div className="border-t dark:border-white/20 border-gray-300 my-4"></div>
 
-              <button
-                onClick={() => handleCleanup()}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
-                Delete All (Groups + Sources)
-              </button>
+                      <button
+                        onClick={() => handleCleanup()}
+                        disabled={loading}
+                        className="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                        Delete All (Groups + Sources)
+                      </button>
 
-              <button
-                onClick={() => handleCleanup(true, false)}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Delete Sources Only
-              </button>
+                      <button
+                        onClick={() => handleCleanup(true, false)}
+                        disabled={loading}
+                        className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Delete Sources Only
+                      </button>
 
-              <button
-                onClick={() => handleCleanup(false, true)}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Delete Groups Only
-              </button>
+                      <button
+                        onClick={() => handleCleanup(false, true)}
+                        disabled={loading}
+                        className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Delete Groups Only
+                      </button>
 
-              <div className="border-t border-white/20 my-4"></div>
+                      <div className="border-t dark:border-white/20 border-gray-300 my-4"></div>
 
-              <button
-                onClick={handleReset}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />}
-                Reset Database State
-              </button>
-            </div>
-          </div>
-        </div>
+                      <button
+                        onClick={handleReset}
+                        disabled={loading}
+                        className="w-full flex items-center justify-center gap-2 bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />}
+                        Reset Database State
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
-        {/* Status Table */}
-        <div className="mt-6 bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-white/20">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-white">Status Overview</h2>
-            <button
-              onClick={loadStatus}
-              className="text-sm text-blue-300 hover:text-blue-200 flex items-center gap-1"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Refresh
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-white/20">
-                  <th className="p-3 text-white/70">Group ID</th>
-                  <th className="p-3 text-white/70">Email</th>
-                  <th className="p-3 text-white/70 text-center">Invited</th>
-                  <th className="p-3 text-white/70 text-center">Token</th>
-                  <th className="p-3 text-white/70 text-center">Group</th>
-                  <th className="p-3 text-white/70 text-center">Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {userStatuses.map(user => (
-                  <tr key={user.id} className="border-b border-white/10 hover:bg-white/5">
-                    <td className="p-3 text-white font-mono text-sm">{user.id}</td>
-                    <td className="p-3 text-white/80 text-sm">{user.email}</td>
-                    <td className="p-3 text-center">
-                      {user.invited ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-400 inline" />
-                      ) : (
-                        <Clock className="w-5 h-5 text-gray-400 inline" />
-                      )}
-                    </td>
-                    <td className="p-3 text-center">
-                      {user.hasToken ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-400 inline" />
-                      ) : (
-                        <XCircle className="w-5 h-5 text-red-400 inline" />
-                      )}
-                    </td>
-                    <td className="p-3 text-center">
-                      {user.groupCreated ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-400 inline" />
-                      ) : (
-                        <Clock className="w-5 h-5 text-gray-400 inline" />
-                      )}
-                    </td>
-                    <td className="p-3 text-center">
-                      {user.sourceCreated ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-400 inline" />
-                      ) : (
-                        <Clock className="w-5 h-5 text-gray-400 inline" />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                {/* Status Table */}
+                <div className="dark:bg-white/5 bg-gray-50 rounded-lg p-6 border dark:border-white/10 border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold dark:text-white text-gray-900">Status Overview</h2>
+                    <button
+                      onClick={loadStatus}
+                      className="text-sm dark:text-blue-300 text-blue-600 dark:hover:text-blue-200 hover:text-blue-700 flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b dark:border-white/20 border-gray-300">
+                          <th className="p-3 dark:text-white/70 text-gray-700">Group ID</th>
+                          <th className="p-3 dark:text-white/70 text-gray-700">Email</th>
+                          <th className="p-3 dark:text-white/70 text-gray-700 text-center">Invited</th>
+                          <th className="p-3 dark:text-white/70 text-gray-700 text-center">Token</th>
+                          <th className="p-3 dark:text-white/70 text-gray-700 text-center">Group</th>
+                          <th className="p-3 dark:text-white/70 text-gray-700 text-center">Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {userStatuses.map(user => (
+                          <tr key={user.id} className="border-b dark:border-white/10 border-gray-200 dark:hover:bg-white/5 hover:bg-gray-100">
+                            <td className="p-3 dark:text-white text-gray-900 font-mono text-sm">{user.id}</td>
+                            <td className="p-3 dark:text-white/80 text-gray-700 text-sm">{user.email}</td>
+                            <td className="p-3 text-center">
+                              {user.invited ? (
+                                <CheckCircle2 className="w-5 h-5 text-green-400 inline" />
+                              ) : (
+                                <Clock className="w-5 h-5 text-gray-400 inline" />
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {user.hasToken ? (
+                                <CheckCircle2 className="w-5 h-5 text-green-400 inline" />
+                              ) : (
+                                <XCircle className="w-5 h-5 text-red-400 inline" />
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {user.groupCreated ? (
+                                <CheckCircle2 className="w-5 h-5 text-green-400 inline" />
+                              ) : (
+                                <Clock className="w-5 h-5 text-gray-400 inline" />
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {user.sourceCreated ? (
+                                <CheckCircle2 className="w-5 h-5 text-green-400 inline" />
+                              ) : (
+                                <Clock className="w-5 h-5 text-gray-400 inline" />
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tokens Tab */}
+            {activeTab === 'tokens' && (
+              <TokenManager environment={environment} />
+            )}
+
+            {/* Groups Tab */}
+            {activeTab === 'groups' && (
+              <GroupManager environment={environment} />
+            )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="mt-8 text-center text-white/50 text-sm">
+        <div className="mt-8 text-center dark:text-white/50 text-gray-600 text-sm">
           Broadcast Group Automation v2.0 • Built with React + TypeScript + Tailwind CSS
         </div>
       </div>

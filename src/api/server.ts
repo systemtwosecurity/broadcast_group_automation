@@ -10,6 +10,7 @@ import { DetectionsAPI } from './detections.js';
 import { IntegrationsAPI } from './integrations.js';
 import type { Environment } from '../types/index.js';
 import axios from 'axios';
+import configRoutes from './config-routes.js';
 
 const app = express();
 
@@ -42,6 +43,9 @@ app.use(express.json());
 // Initialize shared instances
 const db = new StateDatabase();
 const configLoader = new ConfigLoader();
+
+// Mount config routes
+app.use('/api', configRoutes);
 
 // ============================================
 // API Endpoints
