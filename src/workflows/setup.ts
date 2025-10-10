@@ -92,10 +92,13 @@ export class SetupWorkflow {
       try {
         // Get user token
         console.log(`🔐 Logging in as ${user.email}...`);
-        await this.mcpClient.login(
+        const userToken = await this.mcpClient.login(
           `${appUrl}/login`,
           user.email,
-          user.password!
+          user.password!,
+          Config.auth0Domain,
+          Config.auth0ClientId,
+          Config.auth0ClientSecret
         );
 
         // Find group config
@@ -106,17 +109,25 @@ export class SetupWorkflow {
           continue;
         }
 
+        // Import axios
+        const axios = (await import('axios')).default;
+
         // Create group (if not exists)
         let groupApiId = this.db.getGroupApiId(user.id, this.environment);
         
         if (!groupApiId) {
           console.log(`🏗️  Creating group: ${groupConfig.name}...`);
-          const groupResponse = await this.mcpClient.makeApiCall(
+          const groupResponse = await axios.post(
             `${Config.getApiUrl('detections', this.environment)}/api/v1/groups`,
-            'POST',
-            groupConfig.group
+            groupConfig.group,
+            {
+              headers: {
+                'Authorization': `Bearer ${userToken}`,
+                'Content-Type': 'application/json'
+              }
+            }
           );
-          groupApiId = groupResponse.id;
+          groupApiId = groupResponse.data.id;
           
           if (groupApiId) {
             this.db.recordGroupCreation(user.id, this.environment, groupApiId, groupConfig.name);
@@ -136,12 +147,17 @@ export class SetupWorkflow {
             JSON.stringify(groupConfig.source).replace(/<group_id>/g, groupApiId || '')
           );
           
-          const sourceResponse = await this.mcpClient.makeApiCall(
+          const sourceResponse = await axios.post(
             `${Config.getApiUrl('integrations', this.environment)}/api/v1/sources/generic`,
-            'POST',
-            sourcePayload
+            sourcePayload,
+            {
+              headers: {
+                'Authorization': `Bearer ${userToken}`,
+                'Content-Type': 'application/json'
+              }
+            }
           );
-          const sourceId = sourceResponse.id || sourceResponse.source_id || 'unknown';
+          const sourceId = sourceResponse.data.id || sourceResponse.data.source_id || 'unknown';
           
           this.db.recordSourceCreation(user.id, this.environment, sourceId, groupConfig.source.name);
           this.db.logOperation('create_source', user.id, this.environment, 'success');

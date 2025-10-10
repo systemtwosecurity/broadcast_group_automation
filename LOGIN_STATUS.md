@@ -1,5 +1,25 @@
 # Login Automation Status
 
+## ✅ IMPLEMENTED SOLUTION
+
+**Current Approach: Refresh Token → Access Token Exchange**
+
+1. **Browser Login** → User logs in via headless Chromium (MCP Playwright)
+2. **Extract Refresh Token** → Searches `localStorage` and `sessionStorage` for `refresh_token`
+3. **Exchange for Access Token** → Calls Auth0 `/oauth/token` endpoint with client credentials
+4. **Use Access Token** → Makes API calls with `Authorization: Bearer <token>`
+
+This approach bypasses the CORS and persistent session issues!
+
+### Configuration Required
+
+Add to `.env` (see [AUTH0_SETUP.md](./AUTH0_SETUP.md) for details):
+```bash
+AUTH0_DOMAIN=https://systemtwosecurity.us.auth0.com
+AUTH0_CLIENT_ID=your_client_id
+AUTH0_CLIENT_SECRET=your_client_secret
+```
+
 ## ✅ What's Working
 
 1. **Browser Automation**: MCP Playwright integration working perfectly

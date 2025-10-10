@@ -1,5 +1,13 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import axios from 'axios';
+
+interface Auth0TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  refresh_token?: string;
+}
 
 export class MCPClient {
   private client: Client | null = null;
@@ -32,10 +40,53 @@ export class MCPClient {
   }
 
   /**
-   * Login and return the authenticated browser session
-   * The browser maintains auth cookies automatically
+   * Refresh access token using refresh_token via Auth0 OAuth endpoint
    */
-  async login(loginUrl: string, email: string, password: string): Promise<void> {
+  async refreshAccessToken(
+    auth0Domain: string,
+    clientId: string,
+    clientSecret: string,
+    refreshToken: string
+  ): Promise<Auth0TokenResponse> {
+    try {
+      console.log('🔄 Refreshing access token from refresh_token...');
+
+      const response = await axios.post<Auth0TokenResponse>(
+        `${auth0Domain}/oauth/token`,
+        {
+          grant_type: 'refresh_token',
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: refreshToken,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+
+      console.log(`✅ Access token refreshed (expires in ${response.data.expires_in}s)`);
+      return response.data;
+    } catch (error) {
+      const errorMsg = axios.isAxiosError(error)
+        ? `${error.response?.status}: ${JSON.stringify(error.response?.data)}`
+        : error instanceof Error
+        ? error.message
+        : String(error);
+      throw new Error(`Failed to refresh access token: ${errorMsg}`);
+    }
+  }
+
+  /**
+   * Login via browser automation and return access_token
+   */
+  async login(
+    loginUrl: string,
+    email: string,
+    password: string,
+    auth0Domain: string,
+    clientId: string,
+    clientSecret: string
+  ): Promise<string> {
     if (!this.client) {
       throw new Error('MCP client not connected. Call connect() first.');
     }
@@ -288,16 +339,29 @@ export class MCPClient {
       const tokens = JSON.parse(tokensRaw);
       
       console.log(`📦 Available storage keys: ${tokens.storage_keys.join(', ')}`);
-      if (tokens.access_token) {
-        console.log(`✅ Found access_token: ${tokens.access_token.substring(0, 30)}...`);
-      }
+      
+      // If we found refresh_token, use it to get access_token
       if (tokens.refresh_token) {
         console.log(`✅ Found refresh_token: ${tokens.refresh_token.substring(0, 30)}...`);
+        
+        const tokenResponse = await this.refreshAccessToken(
+          auth0Domain,
+          clientId,
+          clientSecret,
+          tokens.refresh_token
+        );
+        
+        return tokenResponse.access_token;
       }
       
-      if (!tokens.access_token && !tokens.refresh_token) {
-        console.log(`⚠️  No tokens found in storage. They might be in httpOnly cookies.`);
+      // If we found access_token directly, use it
+      if (tokens.access_token) {
+        console.log(`✅ Found access_token directly: ${tokens.access_token.substring(0, 30)}...`);
+        return tokens.access_token;
       }
+      
+      // No tokens found
+      throw new Error('No access_token or refresh_token found in storage after login. They might be in httpOnly cookies.');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Login failed for ${email}: ${errorMessage}`);

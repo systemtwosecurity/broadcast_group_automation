@@ -11,9 +11,9 @@ npm install
 # 2. Install Chromium for browser automation (one-time, ~280MB)
 npx playwright install chromium
 
-# 3. Configure environment variables (credentials)
+# 3. Configure environment variables (credentials and Auth0)
 cp .env.example .env
-vim .env  # Add your admin password and user passwords
+vim .env  # Add passwords, Auth0 domain, client ID, and client secret
 
 # 4. Send invitations
 npm run dev -- invite --env dev
@@ -36,6 +36,7 @@ For detailed setup instructions, see **[SETUP.md](./SETUP.md)**.
 | Document | Description |
 |----------|-------------|
 | **[SETUP.md](./SETUP.md)** | 🚀 **Start here!** Complete setup guide for local & Docker |
+| **[AUTH0_SETUP.md](./AUTH0_SETUP.md)** | 🔐 How to get Auth0 credentials (domain, client ID, secret) |
 | **[FINAL_COMPLETE_PLAN.md](./FINAL_COMPLETE_PLAN.md)** | Complete architecture, database design, implementation plan |
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | System architecture, data flow, technology stack |
 | **[SECURITY.md](./SECURITY.md)** | Credential management and security best practices |

@@ -27,6 +27,31 @@ export class Config {
     return password;
   }
 
+  // Auth0 Configuration
+  static get auth0Domain(): string {
+    const domain = process.env.AUTH0_DOMAIN;
+    if (!domain) {
+      throw new Error('AUTH0_DOMAIN environment variable is required');
+    }
+    return domain;
+  }
+
+  static get auth0ClientId(): string {
+    const clientId = process.env.AUTH0_CLIENT_ID;
+    if (!clientId) {
+      throw new Error('AUTH0_CLIENT_ID environment variable is required');
+    }
+    return clientId;
+  }
+
+  static get auth0ClientSecret(): string {
+    const clientSecret = process.env.AUTH0_CLIENT_SECRET;
+    if (!clientSecret) {
+      throw new Error('AUTH0_CLIENT_SECRET environment variable is required');
+    }
+    return clientSecret;
+  }
+
   // User Password Lookup
   static getUserPassword(userId: string): string | null {
     // Convert userId to environment variable format

@@ -66,20 +66,32 @@ export class InvitationWorkflow {
     console.log("=== Admin Login ===");
     const { Config } = await import('../config/config.js');
     const appUrl = Config.getApiUrl('app', this.environment);
-    await this.mcpClient.login(
+    const adminToken = await this.mcpClient.login(
       `${appUrl}/login`,
       usersConfig.admin.email,
-      usersConfig.admin.password!
+      usersConfig.admin.password!,
+      Config.auth0Domain,
+      Config.auth0ClientId,
+      Config.auth0ClientSecret
     );
 
-    // Send invitations using the authenticated browser session
+    // Send invitations using the access token
     console.log("\n=== Sending Invitations ===");
     const needsInviteEmails = needsInvite.map(u => u.email);
-    const result = await this.mcpClient.makeApiCall(
+    
+    const axios = (await import('axios')).default;
+    const response = await axios.post(
       `${Config.getApiUrl('detections', this.environment)}/api/v1/users/invitations`,
-      'POST',
-      { emails: needsInviteEmails }
+      { emails: needsInviteEmails },
+      {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
     );
+    
+    const result = response.data;
 
     // Parse API response
     const invited = result.invitations || result.data?.invitations || [];
