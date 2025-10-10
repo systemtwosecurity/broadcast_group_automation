@@ -1,15 +1,27 @@
 # Login Automation Status
 
-## ✅ IMPLEMENTED SOLUTION
+## ✅ FINAL SOLUTION
 
-**Current Approach: Refresh Token → Access Token Exchange**
+**Approach: Work with Persistent Session + Token Refresh**
 
-1. **Browser Login** → User logs in via headless Chromium (MCP Playwright)
-2. **Extract Refresh Token** → Searches `localStorage` and `sessionStorage` for `refresh_token`
-3. **Exchange for Access Token** → Calls Auth0 `/oauth/token` endpoint with client credentials
-4. **Use Access Token** → Makes API calls with `Authorization: Bearer <token>`
+### Why No Logout?
 
-This approach bypasses the CORS and persistent session issues!
+After investigating all three backend services:
+- **detections-backend** (`detections-backend.dev.s2s.ai`) - No OAuth/logout endpoints
+- **auth-service** (`auth.dev.s2s.ai`) - Only FGA authorization, no authentication
+- **frontend** (`detections.dev.s2s.ai`) - Only proxies to backend
+
+**Finding**: There is **no server-side logout API** deployed. Session management is handled entirely by Auth0.
+
+### Current Implementation
+
+1. **Navigate to /login** → May auto-redirect to app homepage if already logged in
+2. **Detect Current State**:
+   - On Auth0 login page → Fill form and submit
+   - On app homepage → Click login button OR extract existing tokens
+3. **Extract Refresh Token** → Search `localStorage`/`sessionStorage`
+4. **Exchange for Access Token** → Call Auth0 `/oauth/token` with client credentials
+5. **Make API Calls** → Use fresh `access_token`
 
 ### Configuration Required
 
