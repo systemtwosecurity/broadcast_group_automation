@@ -20,18 +20,34 @@ This will download Chromium (~280MB) to `~/.cache/ms-playwright/chromium-*`. Thi
 
 ### 3. Configure Environment Variables
 
-Copy the example environment file and configure your credentials:
+Create a `.env` file in the project root:
 
 ```bash
-cp .env.example .env
+# Create .env file
+cat > .env << 'EOF'
+# Admin Credentials (REQUIRED - will override config/users.json)
+ADMIN_EMAIL=your-actual-email@detections.ai
+ADMIN_PASSWORD=your-actual-password
+
+# User Passwords (set after they verify their emails)
+USER_PASSWORD_SIGMAHQ=REPLACE_AFTER_VERIFICATION
+USER_PASSWORD_YARA_100DAYS=REPLACE_AFTER_VERIFICATION
+USER_PASSWORD_GOOGLESECOPS=REPLACE_AFTER_VERIFICATION
+USER_PASSWORD_AZURE_SENTINEL=REPLACE_AFTER_VERIFICATION
+USER_PASSWORD_REVERSINGLABS_YARA=REPLACE_AFTER_VERIFICATION
+USER_PASSWORD_SPLUNKSECURITY=REPLACE_AFTER_VERIFICATION
+EOF
 ```
 
-Edit `.env` and set:
-- `ADMIN_EMAIL` - Your admin email
-- `ADMIN_PASSWORD` - Your admin password
-- `USER_PASSWORD_<USER_ID>` - Individual user passwords (after verification)
+**Then edit `.env` and replace:**
+- `ADMIN_EMAIL` - Your actual admin email
+- `ADMIN_PASSWORD` - Your actual admin password
+- User passwords remain `REPLACE_AFTER_VERIFICATION` until users verify their emails
 
-**Important:** User passwords should initially be set to `REPLACE_AFTER_VERIFICATION` until users complete email verification.
+**Important Notes:**
+- `ADMIN_EMAIL` from `.env` **overrides** the email in `config/users.json`
+- User passwords should stay as `REPLACE_AFTER_VERIFICATION` until users complete email verification
+- The app will automatically skip users with placeholder passwords
 
 ### 4. Configure Users and Groups
 

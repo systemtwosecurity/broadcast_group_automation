@@ -12,7 +12,7 @@ export class ConfigLoader {
 
   /**
    * Load users from users.json (emails only, no passwords)
-   * Passwords are loaded from environment variables via Config class
+   * Admin email and all passwords are loaded from environment variables
    */
   loadUsers(): UsersConfig {
     try {
@@ -20,8 +20,11 @@ export class ConfigLoader {
       const content = readFileSync(usersPath, 'utf-8');
       const users: UsersConfig = JSON.parse(content);
 
-      // Add passwords from environment variables
+      // Override admin email and password from environment variables
+      users.admin.email = Config.adminEmail;
       users.admin.password = Config.adminPassword;
+      
+      // Add passwords from environment variables for regular users
       users.users = users.users.map(user => ({
         ...user,
         password: Config.getUserPassword(user.id) || undefined
