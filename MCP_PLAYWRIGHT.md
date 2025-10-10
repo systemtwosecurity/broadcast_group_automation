@@ -2,7 +2,7 @@
 
 ## How It Works
 
-This application uses **MCP (Model Context Protocol) Playwright** for browser automation. Unlike traditional Playwright usage, we don't install Playwright as a dependency. Instead:
+This application uses **Microsoft Playwright MCP** (Model Context Protocol) for browser automation. Unlike traditional Playwright usage, we don't install Playwright as a dependency. Instead:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -18,8 +18,7 @@ This application uses **MCP (Model Context Protocol) Playwright** for browser au
 │                           ↓                                 │
 │  ┌───────────────────────────────────────────────────────┐ │
 │  │  External MCP Playwright Server                      │ │
-│  │  (run via npx -y @modelcontextprotocol/              │ │
-│  │         server-playwright)                           │ │
+│  │  (run via npx -y @playwright/mcp)                   │ │
 │  │                                                       │ │
 │  │  - Manages Playwright browser                        │ │
 │  │  - Executes navigation, clicks, fills                │ │
@@ -27,6 +26,12 @@ This application uses **MCP (Model Context Protocol) Playwright** for browser au
 │  └───────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+## Official Resources
+
+- **GitHub**: https://github.com/microsoft/playwright-mcp
+- **NPM**: https://www.npmjs.com/package/@playwright/mcp
+- **Stars**: 21.6k+ ⭐
 
 ## Key Points
 
@@ -38,7 +43,7 @@ This application uses **MCP (Model Context Protocol) Playwright** for browser au
 ```typescript
 const transport = new StdioClientTransport({
   command: 'npx',
-  args: ['-y', '@modelcontextprotocol/server-playwright'],
+  args: ['-y', '@playwright/mcp'],
 });
 ```
 
@@ -49,36 +54,44 @@ This spawns a **separate Node.js process** that:
 - Returns results via stdout
 
 ### 3. **Tool Calls**
-We communicate with the server using tool calls:
+We communicate with the server using tool calls with `browser_` prefix:
 
 ```typescript
 // Navigate
 await client.callTool({
-  name: 'playwright_navigate',
+  name: 'browser_navigate',
   arguments: { url: 'https://example.com/login' }
 });
 
-// Fill form
+// Get page snapshot (accessibility tree)
 await client.callTool({
-  name: 'playwright_fill',
+  name: 'browser_snapshot',
+  arguments: {}
+});
+
+// Type text
+await client.callTool({
+  name: 'browser_type',
   arguments: { 
-    selector: 'input[name="email"]',
-    value: 'user@example.com'
+    element: 'email input field',
+    ref: 'input[name="email"]',
+    text: 'user@example.com'
   }
 });
 
 // Click button
 await client.callTool({
-  name: 'playwright_click',
-  arguments: { selector: 'button[type="submit"]' }
+  name: 'browser_click',
+  arguments: { 
+    element: 'submit button',
+    ref: 'button[type="submit"]'
+  }
 });
 
-// Get token from storage
-const result = await client.callTool({
-  name: 'playwright_evaluate',
-  arguments: { 
-    script: 'localStorage.getItem("access_token")' 
-  }
+// Wait
+await client.callTool({
+  name: 'browser_wait_for',
+  arguments: { time: 5 }
 });
 ```
 
@@ -89,28 +102,29 @@ const result = await client.callTool({
 ✅ **Clean Separation** - Browser automation is external  
 ✅ **Easy Testing** - Can mock MCP client without real browser  
 ✅ **Language Agnostic** - MCP is protocol-based, not JS-specific  
+✅ **Microsoft Official** - Maintained by the Playwright team
 
 ## First Run
 
 On first run, `npx` will:
-1. Download `@modelcontextprotocol/server-playwright` package
-2. The package will download Playwright browser (Chromium)
+1. Download `@playwright/mcp` package (~30MB)
+2. The package will download Playwright browser (Chromium ~120MB)
 3. Subsequent runs use cached versions
 
 ```bash
 # Test if MCP Playwright works
-npm run setup:playwright
+npx -y @playwright/mcp
 
-# Expected output:
-# MCP Playwright Server v1.x.x
+# Or via npm script
+npm run setup:playwright
 ```
 
 ## Docker Considerations
 
 In Docker, we need to:
-1. Pre-install the MCP server
-2. Install Chromium dependencies
-3. Set Playwright environment variables
+1. Pre-install Chromium and dependencies
+2. Set Playwright environment variables
+3. Pre-cache the MCP server
 
 See `Dockerfile` for the complete setup.
 
@@ -122,46 +136,77 @@ See `Dockerfile` for the complete setup.
 ### Issue: "Browser download failed"
 **Solution:** Check internet connection, or pre-download in Docker:
 ```dockerfile
-RUN npx -y @modelcontextprotocol/server-playwright install
+RUN npx -y @playwright/mcp install
 ```
 
 ### Issue: "Chromium not found"
 **Solution:** In Docker/Linux, install browser dependencies:
-```bash
-apt-get install -y chromium chromium-driver
+```dockerfile
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates
 ```
 
 ### Issue: "Connection timeout"
-**Solution:** Increase timeout in MCP client:
+**Solution:** Increase wait time in MCP client:
 ```typescript
 await client.callTool({
-  name: 'playwright_wait',
-  arguments: { timeout: 10000 } // 10 seconds
+  name: 'browser_wait_for',
+  arguments: { time: 10 } // 10 seconds
 });
 ```
 
 ## Available Tools
 
-The MCP Playwright server provides these tools:
+The Microsoft Playwright MCP server provides these tools:
 
+### Core Navigation & Interaction
 | Tool | Purpose |
 |------|---------|
-| `playwright_navigate` | Navigate to URL |
-| `playwright_click` | Click element |
-| `playwright_fill` | Fill input field |
-| `playwright_evaluate` | Execute JavaScript |
-| `playwright_screenshot` | Take screenshot |
-| `playwright_wait` | Wait for time/condition |
+| `browser_navigate` | Navigate to URL |
+| `browser_navigate_back` | Go back to previous page |
+| `browser_click` | Click element |
+| `browser_type` | Type text into element |
+| `browser_hover` | Hover over element |
+| `browser_press_key` | Press keyboard key |
+| `browser_select_option` | Select dropdown option |
+| `browser_fill_form` | Fill multiple form fields |
 
-For complete API, see: https://github.com/modelcontextprotocol/servers/tree/main/src/playwright
+### Information Gathering
+| Tool | Purpose |
+|------|---------|
+| `browser_snapshot` | Capture accessibility tree (better than screenshot) |
+| `browser_take_screenshot` | Take screenshot |
+| `browser_network_requests` | List network requests |
+
+### Utilities
+| Tool | Purpose |
+|------|---------|
+| `browser_wait_for` | Wait for time/text to appear/disappear |
+| `browser_resize` | Resize browser window |
+| `browser_handle_dialog` | Handle alerts/confirms/prompts |
+| `browser_attach_file` | Upload files |
+
+### Tab Management
+| Tool | Purpose |
+|------|---------|
+| `browser_tabs` | List, create, close, or select tabs |
+
+### Advanced (Opt-in)
+| Tool | Purpose | Flag |
+|------|---------|------|
+| `browser_mouse_click_xy` | Click at coordinates | `--caps=vision` |
+| `browser_pdf_save` | Save page as PDF | `--caps=pdf` |
+| `browser_start_tracing` | Start trace recording | `--caps=tracing` |
+
+For complete API, see: https://github.com/microsoft/playwright-mcp
 
 ## Security Note
 
 The MCP server runs in a **sandboxed process** with limited capabilities. It:
-- Cannot access your filesystem directly
+- Cannot access your filesystem directly (except for file uploads)
 - Cannot execute arbitrary system commands
 - Only communicates via stdio protocol
 - Browser state is isolated per session
+- User approval required for sensitive actions
 
 ---
 
@@ -178,4 +223,3 @@ App → MCP Client → (stdio) → MCP Server → Playwright → Browser
 ```
 
 This architecture provides **better isolation and flexibility** at the cost of slightly more setup complexity.
-

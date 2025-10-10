@@ -30,7 +30,7 @@ npm run dev -- status --env dev
 # (First run will download MCP Playwright server automatically)
 ```
 
-> **Note:** On first run, `npx` will download the MCP Playwright server (~50MB) and Chromium browser. This is cached for subsequent runs. See [MCP_PLAYWRIGHT.md](./MCP_PLAYWRIGHT.md) for details.
+> **Note:** On first run, `npx` will download the Microsoft Playwright MCP server (`@playwright/mcp`) and Chromium browser (~150MB total). This is cached for subsequent runs. See [MCP_PLAYWRIGHT.md](./MCP_PLAYWRIGHT.md) for details.
 
 ## 📖 Documentation
 

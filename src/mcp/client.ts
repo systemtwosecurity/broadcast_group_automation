@@ -6,9 +6,10 @@ export class MCPClient {
   private transport: StdioClientTransport | null = null;
 
   async connect() {
+    console.log('🔌 Connecting to Microsoft Playwright MCP server...');
     this.transport = new StdioClientTransport({
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-playwright'],
+      args: ['-y', '@playwright/mcp'],
     });
 
     this.client = new Client(
@@ -22,6 +23,7 @@ export class MCPClient {
     );
 
     await this.client.connect(this.transport);
+    console.log('✅ Connected to Playwright MCP server');
   }
 
   async login(loginUrl: string, email: string, password: string): Promise<string> {
@@ -34,45 +36,62 @@ export class MCPClient {
     try {
       // Navigate to login page
       await this.client.callTool({
-        name: 'playwright_navigate',
+        name: 'browser_navigate',
         arguments: { url: loginUrl },
       });
 
-      // Fill email
+      // Wait for page to load
       await this.client.callTool({
-        name: 'playwright_fill',
+        name: 'browser_wait_for',
+        arguments: { time: 2 },
+      });
+
+      // Get page snapshot to find elements
+      const snapshot = await this.client.callTool({
+        name: 'browser_snapshot',
+        arguments: {},
+      });
+
+      console.log('📸 Page snapshot captured, filling form...');
+
+      // Type email
+      await this.client.callTool({
+        name: 'browser_type',
         arguments: {
-          selector: 'input[name="email"]',
-          value: email,
+          element: 'email input field',
+          ref: 'input[name="email"]',
+          text: email,
         },
       });
 
-      // Fill password
+      // Type password
       await this.client.callTool({
-        name: 'playwright_fill',
+        name: 'browser_type',
         arguments: {
-          selector: 'input[name="password"]',
-          value: password,
+          element: 'password input field',
+          ref: 'input[name="password"]',
+          text: password,
         },
       });
 
-      // Click submit
+      // Click submit button
       await this.client.callTool({
-        name: 'playwright_click',
+        name: 'browser_click',
         arguments: {
-          selector: 'button[type="submit"]',
+          element: 'submit button',
+          ref: 'button[type="submit"]',
         },
       });
 
-      // Wait for redirect
+      // Wait for redirect/navigation
       await this.client.callTool({
-        name: 'playwright_wait',
-        arguments: { timeout: 5000 },
+        name: 'browser_wait_for',
+        arguments: { time: 5 },
       });
 
-      // Get token from localStorage
+      // Execute JavaScript to get token from storage
       const tokenResult = await this.client.callTool({
-        name: 'playwright_evaluate',
+        name: 'browser_console',
         arguments: {
           script: `
             localStorage.getItem('access_token') || 
