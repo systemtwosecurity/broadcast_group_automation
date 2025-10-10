@@ -480,37 +480,137 @@ export class MCPClient {
       
       try {
         // Use browser_evaluate to access cookies via CDP-like functionality
-        console.log(`   🔍 Searching httpOnly cookies for refresh_token...`);
+        console.log(`   🔍 Intercepting API requests to extract Authorization header...`);
+        
+        // Intercept fetch/XHR to capture Authorization headers
         const cookieExtract = await this.client.callTool({
           name: 'browser_evaluate',
           arguments: {
             function: `async () => {
-              // Try to get all cookies including httpOnly via CDP if available
-              // Note: document.cookie only shows non-httpOnly cookies
               const result = {
-                documentCookies: [],
-                cookieNames: [],
-                refreshToken: null,
-                accessToken: null
+                foundToken: null,
+                tokenSource: null,
+                interceptedRequests: []
               };
               
-              // Get regular cookies from document.cookie
-              const cookies = document.cookie.split(';');
-              for (const cookie of cookies) {
-                const [name, value] = cookie.trim().split('=');
-                if (name) {
-                  result.cookieNames.push(name);
-                  result.documentCookies.push({ name, value: value ? value.substring(0, 50) : '' });
-                  
-                  // Look for token-like values
-                  if ((name.includes('refresh') || name.includes('rt')) && value && value.length > 20) {
-                    result.refreshToken = value;
-                  }
-                  if ((name.includes('access') || name.includes('at') || name.includes('token')) && value && value.length > 20 && value.startsWith('eyJ')) {
-                    result.accessToken = value;
+              // Method 1: Intercept fetch API
+              const originalFetch = window.fetch;
+              let capturedToken = null;
+              
+              window.fetch = function(...args) {
+                const [url, options] = args;
+                
+                // Capture Authorization header if present
+                if (options && options.headers) {
+                  const headers = options.headers;
+                  if (headers.Authorization || headers.authorization) {
+                    capturedToken = headers.Authorization || headers.authorization;
                   }
                 }
+                
+                return originalFetch.apply(this, args);
+              };
+              
+              // Method 2: Try to make an API call that the app would normally make
+              // This should include any auth headers the app uses
+              try {
+                const apiUrl = window.location.origin + '/api/v1/detections';
+                console.log('Attempting API call to:', apiUrl);
+                
+                const response = await originalFetch(apiUrl, {
+                  method: 'GET',
+                  credentials: 'include'
+                });
+                
+                result.interceptedRequests.push({
+                  url: apiUrl,
+                  status: response.status,
+                  ok: response.ok
+                });
+              } catch (e) {
+                result.interceptedRequests.push({
+                  error: e.message
+                });
               }
+              
+              // Method 3: Check if app stores token in window object or global scope
+              const globalKeys = Object.keys(window).filter(k => 
+                k.toLowerCase().includes('token') || 
+                k.toLowerCase().includes('auth') ||
+                k.toLowerCase().includes('session')
+              );
+              
+              for (const key of globalKeys) {
+                try {
+                  const value = window[key];
+                  if (typeof value === 'string' && value.length > 50 && value.startsWith('eyJ')) {
+                    result.foundToken = value;
+                    result.tokenSource = 'window.' + key;
+                    break;
+                  }
+                } catch (e) {
+                  // Skip inaccessible properties
+                }
+              }
+              
+              // Check captured token from fetch intercept
+              if (capturedToken) {
+                const bearer = capturedToken.replace(/^Bearer\s+/i, '');
+                if (bearer && bearer.startsWith('eyJ')) {
+                  result.foundToken = bearer;
+                  result.tokenSource = 'fetch_authorization_header';
+                }
+              }
+              
+              // Method 4: Check common storage locations one more time with broader search
+              const storageLocations = [
+                { storage: localStorage, name: 'localStorage' },
+                { storage: sessionStorage, name: 'sessionStorage' }
+              ];
+              
+              for (const { storage, name } of storageLocations) {
+                for (let i = 0; i < storage.length; i++) {
+                  const key = storage.key(i);
+                  if (key) {
+                    const value = storage.getItem(key);
+                    
+                    // Check if value itself is a JWT
+                    if (value && value.length > 50 && value.startsWith('eyJ')) {
+                      result.foundToken = value;
+                      result.tokenSource = name + '.' + key + ' (direct)';
+                      break;
+                    }
+                    
+                    // Check if value is JSON with token inside
+                    try {
+                      const parsed = JSON.parse(value);
+                      const checkObject = (obj, path = '') => {
+                        for (const [k, v] of Object.entries(obj)) {
+                          if (typeof v === 'string' && v.length > 50 && v.startsWith('eyJ')) {
+                            result.foundToken = v;
+                            result.tokenSource = name + '.' + key + path + '.' + k;
+                            return true;
+                          } else if (typeof v === 'object' && v !== null) {
+                            if (checkObject(v, path + '.' + k)) {
+                              return true;
+                            }
+                          }
+                        }
+                        return false;
+                      };
+                      if (checkObject(parsed)) {
+                        break;
+                      }
+                    } catch (e) {
+                      // Not JSON
+                    }
+                  }
+                }
+                if (result.foundToken) break;
+              }
+              
+              // Restore original fetch
+              window.fetch = originalFetch;
               
               return JSON.stringify(result);
             }`,
@@ -533,29 +633,15 @@ export class MCPClient {
         cookiesRaw = cookiesRaw.replace(/^["']|["']$/g, '');
         cookiesRaw = cookiesRaw.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
         
-        const cookieData = JSON.parse(cookiesRaw);
+        const tokenData = JSON.parse(cookiesRaw);
         
-        console.log(`📦 Found ${cookieData.cookieNames.length} cookies: ${cookieData.cookieNames.join(', ')}`);
+        console.log(`📦 Intercepted requests: ${tokenData.interceptedRequests.length}`);
         
-        // Priority 3a: Use refresh_token from cookies if found
-        if (cookieData.refreshToken) {
-          console.log(`✅ Found refresh_token in cookies: ${cookieData.refreshToken.substring(0, 30)}...`);
-          console.log(`🔄 Exchanging cookie refresh_token for access_token...`);
-          
-          const tokenResponse = await this.refreshAccessToken(
-            auth0Domain,
-            clientId,
-            clientSecret,
-            cookieData.refreshToken
-          );
-          console.log(`✅ Got fresh access_token from cookie refresh_token (expires in ${tokenResponse.expires_in}s)`);
-          return tokenResponse.access_token;
-        }
-        
-        // Priority 3b: Use access_token from cookies if found
-        if (cookieData.accessToken) {
-          console.log(`✅ Found access_token in cookies: ${cookieData.accessToken.substring(0, 30)}...`);
-          return cookieData.accessToken;
+        // Priority 3a: Use token from any source if found!
+        if (tokenData.foundToken) {
+          console.log(`✅ Found access_token via: ${tokenData.tokenSource}`);
+          console.log(`✅ Token preview: ${tokenData.foundToken.substring(0, 30)}...`);
+          return tokenData.foundToken;
         }
         
         console.log(`⚠️  No tokens in accessible cookies - tokens must be in httpOnly cookies`);
